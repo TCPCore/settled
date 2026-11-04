@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settled — integrate in three steps</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .topbar{background:rgba(7,13,24,.92);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;backdrop-filter:blur(12px)}
+  .topbar-inner{display:flex;align-items:center;gap:20px;max-width:1240px;margin:0 auto;padding:0 24px;height:64px}
+  .brand{display:flex;align-items:center;gap:9px;text-decoration:none;flex:none}
+  .brand-mark{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--emerald-dim);border:1px solid var(--emerald-line);color:var(--emerald);font:800 13px var(--mono)}
+  .brand-text{display:flex;flex-direction:column;line-height:1.08}
+  .brand-name{font:750 14px var(--sans);color:var(--ink);letter-spacing:-.01em}
+  .brand-sub{font:600 7.5px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--muted-2);display:block}
+  .nav{display:flex;align-items:center;gap:16px;margin-left:auto}
+  .nav a{font:650 10.5px var(--sans);color:var(--muted);text-decoration:none;padding:5px 0;border-bottom:1px solid transparent}
+  .nav a:hover,.nav a.active{color:var(--ink);border-bottom-color:var(--emerald)}
+  .topbar-right{display:flex;align-items:center;margin-left:8px;flex:none}
+  .integrate-wrap{max-width:1080px;margin:0 auto;padding:34px 24px 70px}
+  .integrate-hero{max-width:760px;margin-bottom:26px}
+  .integrate-hero h1{font-size:38px;line-height:1.08;letter-spacing:-.03em;margin:10px 0 12px}
+  .integrate-hero h1 em{color:var(--gold);font-style:normal}
+  .integrate-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}
+  .integrate-card{background:linear-gradient(180deg,rgba(17,28,46,.92),rgba(11,20,34,.98));border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px}
+  .integrate-step{font:800 9px var(--mono);letter-spacing:.14em;color:var(--emerald);text-transform:uppercase}
+  .integrate-card h2{font-size:16px;margin:7px 0 6px;letter-spacing:-.01em}
+  .integrate-card p{font-size:11.5px;line-height:1.6;color:var(--muted);margin:0 0 10px}
+  .integrate-card code,.codeblock{font-family:var(--mono);font-size:9.5px}
+  .codeblock{background:#081120;border:1px solid var(--line);border-radius:9px;padding:10px 11px;overflow:auto;color:var(--ink-2);line-height:1.65;white-space:pre}
+  .integrate-note{margin-top:22px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:rgba(8,16,29,.65)}
+  .integrate-note b{color:var(--gold)}
+  .integrate-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:11px}
+  .integrate-table th,.integrate-table td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}
+  .integrate-table th{color:var(--muted-2);font:700 8.5px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+  .integrate-table td{color:var(--ink-2)}
+  .integrate-foot{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap}
+  @media(max-width:900px){.integrate-grid{grid-template-columns:1fr}.integrate-hero h1{font-size:30px}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true">S</span>
+      <span class="brand-text"><span class="brand-name">Settled</span><span class="brand-sub">Trust settlement</span></span>
+    </a>
+    <nav class="nav">
+      <a href="index.html">Dashboard</a>
+      <a href="store.html">Storefront</a>
+      <a href="agent.html">Agent console</a>
+      <a href="integrate.html" data-nav="integrate">Integrate</a>
+      <a href="demo.html" class="active">Demo</a>
+    </nav>
+    <div class="topbar-right"><span class="env-pill"><span class="dot"></span><span>SIM</span></span></div>
+  </div>
+</header>
+
+<main class="integrate-wrap">
+  <section class="integrate-hero">
+    <div class="eyebrow">For merchants, platforms and personal-AI builders</div>
+    <h1>Three steps to let a personal AI <em>trade with a merchant</em>.</h1>
+    <p class="page-sub">Settled is the merchant-side negotiation and assurance desk. The merchant publishes policy and protection; a consumer's AI presents a mandate; both agents negotiate; PayPal settles; the buyer gets recourse. No custody, no new checkout, no card data.</p>
+  </section>
+
+  <div class="integrate-grid">
+    <section class="integrate-card">
+      <div class="integrate-step">Step 1 · Merchant</div>
+      <h2>Connect PayPal + set policy</h2>
+      <p>Install the Settled app from the PayPal partner directory (or run the server beside your store) and set three things: trust credential, protection tier, and the seller's private policy.</p>
+      <div class="codeblock">PAYPAL_LIVE=1
+PAYPAL_CLIENT_ID=...
+PAYPAL_CLIENT_SECRET=...
+PAYPAL_ENV=sandbox
+# seller policy is server-side:
+# floor hidden, auto_accept, tiers</div>
+    </section>
+
+    <section class="integrate-card">
+      <div class="integrate-step">Step 2 · Checkout</div>
+      <h2>Bind the contract, then order</h2>
+      <p>At checkout, create a policy-bound contract and place the order at the agreed price. The ACC hash travels on the PayPal order.</p>
+      <div class="codeblock">POST /api/contracts
+{ "merchant_id":"m1",
+  "product_id":"p1",
+  "buyer_agent_id":"a1" }
+
+POST /api/merchants/m1/orders
+{ "contract_id":"ctr_...",
+  "agent_id":"a1" }</div>
+    </section>
+
+    <section class="integrate-card">
+      <div class="integrate-step">Step 3 · Consumer AI</div>
+      <h2>Present a passport + mandate</h2>
+      <p>The personal AI verifies itself, negotiates within the mandate, and signs. Any AI can call the API; MCP tools are the packaging step.</p>
+      <div class="codeblock">POST /api/agents/verify
+{ "agent_id":"a1",
+  "merchant_id":"m1",
+  "amount":249 }
+
+POST /api/contracts/:id/ai-auto
+# -> signed contract + dialogue</div>
+    </section>
+  </div>
+
+  <section class="integrate-note">
+    <b>Judge path:</b> the hosted demo runs in SIM (no keys, no money). Click <a href="demo.html">/demo.html</a> → <b>Reset</b> → <b>Run full demo</b>. Step 3 shows the merchant agent and the consumer's personal agent negotiating in the open; step 5 shows the instant refund. The recorded video shows the same flow on the PayPal <b>sandbox</b> with real capture/refund IDs.
+  </section>
+
+  <h2 style="font-size:18px;margin:26px 0 0">What PayPal provides vs what the merchant builds</h2>
+  <table class="integrate-table">
+    <thead><tr><th>Layer</th><th>PayPal</th><th>Settled / merchant</th></tr></thead>
+    <tbody>
+      <tr><td>Identity &amp; onboarding</td><td>Merchant account, KYB, Partner Referrals</td><td>Settled app install + policy console</td></tr>
+      <tr><td>Payment</td><td>Orders v2 create/capture, refunds, webhooks</td><td>Contract price, ACC hash, protection quote</td></tr>
+      <tr><td>Trust</td><td>Settlement + dispute data</td><td>Signed outcome credential, risk tier, cap</td></tr>
+      <tr><td>Negotiation</td><td>Agentic rails (AP2/ACP/UCP, Agent Ready)</td><td>Merchant agent + consumer-AI API / MCP</td></tr>
+      <tr><td>Recourse</td><td>Refund rail, buyer protection</td><td>Reserve-funded instant claim + AI review</td></tr>
+    </tbody>
+  </table>
+
+  <div class="integrate-foot">
+    <a class="btn btn-primary" href="demo.html">Open the live demo</a>
+    <a class="btn btn-ghost" href="https://github.com/TCPCore/settled#readme">Read the integration docs</a>
+    <a class="btn btn-ghost" href="agent.html">Agent console</a>
+  </div>
+
+  <p class="tiny muted" style="margin-top:26px;max-width:760px">Current build: working prototype (REST + sandbox adapter). Production packaging: PayPal app/Partner Referral, drop-in embed, OpenAPI + MCP server, insurer/LC-backed reserve, merchant OAuth. The demo pool is illustrative, not a balance sheet.</p>
+</main>
+</body>
+</html>

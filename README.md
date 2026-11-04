@@ -79,6 +79,10 @@ The server then creates real sandbox Orders and the demo shows an **Open PayPal 
 
 **Reset before the demo:** `curl -X POST http://127.0.0.1:4173/api/reset` (or click Reset in the UI).
 
+## Integration in three steps
+
+Open **[/integrate.html](http://127.0.0.1:4173/integrate.html)** (or `integrate.html` on the hosted demo): merchant connects PayPal + sets policy → checkout binds the contract and orders at the agreed price → the consumer's personal AI verifies, negotiates and signs. The page also shows what PayPal provides vs what the merchant builds.
+
 ## Final review, integration and hosting
 
 - **[FINAL-REVIEW.md](FINAL-REVIEW.md)** — the full pre-submission review: how PayPal integrates Settled (merchant app, PSP/platform, consumer-AI API), the transaction sequence, what judges vet, the 4-minute pitch, hosting and the privacy plan.

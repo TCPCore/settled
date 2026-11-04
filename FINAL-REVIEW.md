@@ -22,7 +22,7 @@
 | **Trust engine** | HMAC-SHA256 credential, SHA-256 hash-chained event log, risk tiers 35/90/150 bps, reserve accounting, instant claims |
 | **Tests** | `npm test` → **63/63**, including PayPal SIM create/capture/refund and AI fallback |
 | **Repo** | public MIT repo: https://github.com/TCPCore/settled |
-| **Deployable demo** | `Dockerfile`, `render.yaml`, `DEPLOY.md`; private SIM tunnel for testing (unlisted) |
+| **Deployable demo** | `Dockerfile`, `render.yaml`, `DEPLOY.md`; `/integrate.html`; private SIM tunnel for testing (unlisted) |
 | **Narrative** | [WRITEUP.md](WRITEUP.md), [JUDGE-BRIEF.md](JUDGE-BRIEF.md), [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md), [HACKATHON-PROOF.md](HACKATHON-PROOF.md) |
 
 ---
@@ -190,7 +190,7 @@ With keys: `docker run --rm -p 8080:8080 --env-file .env settled-demo`.
 |---|---|---|---|
 | **P0** | Video not recorded | 2:55 take per [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md); step 3 chat + live PayPal capture/refund; upload public YouTube | You |
 | **P0** | `VIDEO_URL_HERE` empty | Fill after upload; submit on Devpost | You |
-| **P1** | Merchant install is not a packaged plugin | Add a 3-line embed + `/install` page and an OpenAPI/MCP manifest; say "prototype" until then | Build |
+| **P1** | Merchant install is not a packaged plugin | `/integrate.html` now shows the 3 steps and what PayPal vs the merchant builds; still add a drop-in embed + OpenAPI/MCP manifest, and keep saying "prototype" | Build |
 | **P1** | Render service not created | Connect repo, keep SIM, test URL, keep unlisted | You |
 | **P2** | No real merchant OAuth/Partner Referral | Document the production path; don't claim it in the demo | Docs |
 | **P2** | MCP endpoint absent | Add `settled.verify/negotiate/claim` MCP tools after the hackathon | Build |
