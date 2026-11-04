@@ -771,6 +771,11 @@
     var policy = c.policy || {};
     var terms = c.terms || {};
     var sigs = c.signatures || {};
+    var dialogue = asArray(ai && ai.dialogue);
+    var hasDialogue = dialogue.length > 0;
+    var openingPrice = Math.round(list * 0.86);
+    var firstBuyer = dialogue.filter(function (d) { return String(d.from || '').indexOf('buyer') >= 0 && d.action !== 'accept'; })[0];
+    if (firstBuyer && firstBuyer.price !== undefined && firstBuyer.price !== null) openingPrice = Number(firstBuyer.price);
     var html =
       '<div class="demo-result">' +
         '<div class="demo-result-head">' +
@@ -784,11 +789,12 @@
           '<div class="ph-right"><span class="badge emerald">' + S.icon('check') + ' ' + esc(c.status || 'accepted') + '</span>' +
           '<div class="ph-sub" style="margin-top:6px">' + esc(S.shortHash(c.id, 18)) + '</div></div>' +
         '</div>' +
+        (hasDialogue ? renderAgentNegotiation(c, ai, dialogue) : '') +
         renderTranscript(c) +
-        renderAiMoves(ai) +
+        renderAiMoves(ai, !hasDialogue) +
         (state.contractAiRequested && !ai ? '<div class="demo-callout"><b>AI fallback:</b> the AI auto endpoint returned no reasoning payload — the deterministic transcript above is the contract of record.</div>' : '') +
         '<div class="demo-metrics" style="margin-top:10px">' +
-          metric('Policy floor', esc(S.money(policy.floor))) +
+          metric('Opening offer', esc(S.money(openingPrice))) +
           metric('Auto-accept', esc(S.money(policy.auto_accept))) +
           metric('Max discount', esc(policy.max_discount_pct !== undefined ? policy.max_discount_pct + '%' : '—')) +
           metric('Rounds', esc(numText(c.rounds))) +
@@ -805,8 +811,120 @@
     setStepResult(3, html);
   }
 
-  function renderAiMoves(ai) {
+  function renderPolicyBadge(code, side, action) {
+    var value = String(code || '').toLowerCase();
+    var label, cls;
+    if (value.indexOf('within') >= 0 || value.indexOf('mandate') >= 0) {
+      label = 'within mandate'; cls = 'within';
+    } else if (value.indexOf('auto_accept') >= 0 || value.indexOf('policy_price') >= 0 || value.indexOf('policy') >= 0) {
+      label = 'policy price'; cls = 'policy';
+    } else if (value.indexOf('signed') >= 0) {
+      label = 'signed'; cls = 'signed';
+    } else {
+      label = value ? value.replace(/_/g, ' ') : (side === 'merchant' ? 'policy price' : 'within mandate');
+      cls = side === 'merchant' ? 'policy' : 'within';
+    }
+    return '<span class="agent-policy-badge ' + cls + '">' + esc(label) + '</span>';
+  }
+
+  function renderAgentNegotiation(c, ai, dialogue) {
+    var policy = c.policy || {};
+    var list = Number(c.list_price) || 0;
+    var auto = Number(policy.auto_accept);
+    var merchantEntry = dialogue.filter(function (d) { return String(d.from || '').indexOf('merchant') >= 0; })[0];
+    if (!isFinite(auto) || auto <= 0) auto = merchantEntry && merchantEntry.price !== undefined ? Number(merchantEntry.price) : Math.round(list * 0.95);
+    var opening = null;
+    dialogue.forEach(function (d) {
+      if (opening === null && String(d.from || '').indexOf('buyer') >= 0 && d.action !== 'accept' && d.price !== undefined) opening = Number(d.price);
+    });
+    if (opening === null || !isFinite(opening)) opening = Math.round(list * 0.86);
+    var middle = Math.round((opening + auto) / 2);
+    var allowed = [];
+    [opening, middle, auto].forEach(function (v) {
+      var n = Math.round(Number(v));
+      if (isFinite(n) && allowed.indexOf(n) < 0) allowed.push(n);
+    });
+    allowed.sort(function (a, b) { return a - b; });
+
+    var buyerAgent = (state.agents || []).filter(function (a) { return a.id === 'a1'; })[0] || FALLBACK_AGENTS[0];
+    var buyerOperator = operatorName(buyerAgent) || 'Acme Procurement Inc';
+    var buyerLimit = buyerAgent && buyerAgent.limits && buyerAgent.limits.max_amount ? buyerAgent.limits.max_amount : 500;
+    var buyerCategories = buyerAgent && buyerAgent.limits ? asArray(buyerAgent.limits.categories) : [];
+    var sellerName = (state.merchant && state.merchant.name) || 'Northwind Audio';
+    var aiUsed = !!(ai && ai.used);
+    var aiBadge = '<span class="ai-badge ' + (aiUsed ? 'ai' : 'fallback') + '">' + (aiUsed ? 'AI' : 'FALLBACK') + '</span>';
+
+    var rows = dialogue.map(function (d) {
+      var side = String(d.from || '').toLowerCase().indexOf('merchant') >= 0 ? 'merchant' : 'buyer';
+      var action = String(d.action || (side === 'merchant' ? 'counter' : 'offer')).toLowerCase();
+      var agentName = d.agent || (side === 'merchant' ? 'Northwind Seller Agent' : 'ProcureBot');
+      var price = d.price !== undefined && d.price !== null ? Number(d.price) : null;
+      var priceLabel = price !== null && isFinite(price) ? (Math.round(price) === price ? S.money0(price) : S.money(price)) : '';
+      var priceChip = priceLabel ? (action === 'accept' ? 'accepted ' + priceLabel : priceLabel) : '';
+      var signed = action === 'accept' ? '<span class="agent-policy-badge signed">signed</span>' : '';
+      var message = d.message || d.note || '';
+      var rationale = d.rationale || '';
+      var initialsText = initials(agentName) || (side === 'merchant' ? 'N' : 'P');
+      return '<div class="agent-row ' + side + '" data-agent-side="' + side + '">' +
+        '<span class="agent-avatar ' + side + '">' + esc(initialsText) + '</span>' +
+        '<div class="agent-bubble">' +
+          '<div class="agent-bubble-head">' +
+            '<span class="agent-name">' + esc(agentName) + '</span>' +
+            '<span class="agent-action ' + side + '">' + esc(action) + '</span>' +
+            (priceChip ? '<span class="agent-price">' + esc(priceChip) + '</span>' : '') +
+            renderPolicyBadge(d.policy, side, action) + signed +
+          '</div>' +
+          (message ? '<div class="agent-msg">' + esc(message) + '</div>' : '') +
+          (rationale ? '<div class="agent-rationale">' + esc(rationale) + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    var signature = c.signatures || {};
+    var signedLine = '<div class="agent-sign-line">' +
+      '<span>signed contract <b class="mono">' + esc(S.shortHash(c.hash, 18)) + '</b></span>' +
+      '<span>buyer sig <b class="mono">' + esc(sigText(signature.buyer)) + '</b></span>' +
+      '<span>seller sig <b class="mono">' + esc(sigText(signature.merchant)) + '</b></span>' +
+      '<span class="sign-terms">terms fixed before payment</span>' +
+    '</div>';
+
+    var strip = '<div class="agent-policy-strip">' + S.icon('lock') +
+      '<span class="policy-lead">Server policy:</span>' +
+      '<span>allowed prices <b class="mono">[' + esc(allowed.join(', ')) + ']</b></span>' +
+      '<span>buyer mandate <b class="mono">' + esc(S.money0(buyerLimit)) + '</b></span>' +
+      '<span>seller auto-accept <b class="mono">' + esc(S.money0(auto)) + '</b></span>' +
+      '<span class="policy-model-note">the model can talk but cannot move money outside these.</span>' +
+    '</div>';
+
+    return '<div class="agent-panel" id="agentNegotiationPanel">' +
+      '<div class="agent-panel-head">' +
+        '<div style="min-width:0"><div class="agent-panel-title">Agent-to-agent negotiation</div>' +
+        '<div class="agent-panel-sub">Two agents, one contract — the server policy fixes every number.</div></div>' +
+        '<div class="agent-panel-badges">' + aiBadge + '<span class="badge">policy-guarded</span></div>' +
+      '</div>' +
+      '<div class="agent-chips">' +
+        '<div class="agent-chip buyer">' +
+          '<span class="agent-avatar buyer">' + esc(initials('ProcureBot')) + '</span>' +
+          '<div style="min-width:0"><div class="agent-chip-name">Sam’s personal agent — ProcureBot</div>' +
+          '<div class="agent-chip-sub">' + esc(buyerOperator) + ' · mandate ' + esc(S.money0(buyerLimit)) + ' · ' + esc(buyerCategories.join('/') || 'audio/electronics') + '</div></div>' +
+          '<span class="badge blue">buyer</span>' +
+        '</div>' +
+        '<div class="agent-chip seller">' +
+          '<span class="agent-avatar merchant">' + esc(initials('Northwind Seller Agent')) + '</span>' +
+          '<div style="min-width:0"><div class="agent-chip-name">Northwind Seller Agent</div>' +
+          '<div class="agent-chip-sub">' + esc(sellerName) + ' · published policy</div></div>' +
+          '<span class="badge gold">seller</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="agent-chat">' + rows + '</div>' +
+      strip +
+      signedLine +
+    '</div>';
+  }
+
+  function renderAiMoves(ai, openByDefault) {
     if (!ai) return '';
+    openByDefault = !!openByDefault;
     var moves = asArray(ai.moves);
     if (!moves.length) return '';
     var overallUsed = !!ai.used;
@@ -814,12 +932,13 @@
       return v && String(v).toLowerCase() !== 'none';
     });
     var provider = providerParts.join(' · ');
-    var html = '<div class="ai-block">' +
-      '<div class="ai-head">' + S.icon('sparkle') +
-        '<span class="ai-title">Agent reasoning</span>' +
+    var html = '<details class="ai-block ai-secondary"' + (openByDefault ? ' open' : '') + '>' +
+      '<summary class="ai-summary">' + S.icon('sparkle') +
+        '<span class="ai-title">Model reasoning</span>' +
         '<span class="ai-badge ' + (overallUsed ? 'ai' : 'fallback') + '">' + (overallUsed ? 'AI' : 'FALLBACK') + '</span>' +
-        '<span class="tiny muted">' + esc(provider || 'deterministic fallback') + '</span>' +
-      '</div>';
+        '<span class="tiny muted">' + esc(provider || 'deterministic fallback') + (moves.length ? ' · ' + moves.length + ' moves' : '') + '</span>' +
+      '</summary>' +
+      '<div class="ai-body">';
     moves.forEach(function (move) {
       var used = move.used !== undefined ? !!move.used : overallUsed;
       var action = move.action || (move.price !== undefined ? 'offer' : 'move');
@@ -836,7 +955,7 @@
         (rationale ? '<div class="ai-rationale">' + esc(rationale) + '</div>' : '') +
       '</div>';
     });
-    return html + '</div>';
+    return html + '</div></details>';
   }
 
   function renderTranscript(contract) {

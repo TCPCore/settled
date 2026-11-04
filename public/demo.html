@@ -245,6 +245,54 @@
 .paypal-status{margin-top:8px;font:600 9px/1.5 var(--mono);color:var(--muted-2)}
 .paypal-status b{color:var(--emerald)}
 
+/* Agent-to-agent negotiation panel */
+.agent-panel{margin-top:11px;border:1px solid var(--line-2);border-radius:12px;background:linear-gradient(180deg,rgba(10,18,31,.85),rgba(8,16,29,.72));overflow:hidden;animation:rise .3s ease}
+.agent-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 13px;border-bottom:1px solid rgba(29,44,68,.75);flex-wrap:wrap}
+.agent-panel-title{font-size:12.5px;font-weight:700;letter-spacing:-.01em}
+.agent-panel-sub{font-size:9.5px;color:var(--muted-2);margin-top:3px}
+.agent-panel-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.agent-chips{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.agent-chip{background:rgba(10,19,34,.9);padding:9px 11px;display:flex;align-items:center;gap:8px;min-width:0}
+.agent-chip-name{font-size:10.5px;font-weight:650;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-chip-sub{font-size:8.5px;color:var(--muted-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-chip > .badge{margin-left:auto;flex:none}
+.agent-avatar{width:25px;height:25px;border-radius:7px;display:grid;place-items:center;flex:none;font:750 9px var(--mono);border:1px solid var(--line-2);background:#0C1A2E;color:var(--muted)}
+.agent-avatar.buyer{color:var(--blue);border-color:var(--blue-line);background:var(--blue-dim)}
+.agent-avatar.merchant{color:var(--gold);border-color:var(--gold-line);background:var(--gold-dim)}
+.agent-chat{padding:11px 13px;display:flex;flex-direction:column;gap:9px;max-height:360px;overflow:auto}
+.agent-row{display:flex;gap:8px;align-items:flex-start;min-width:0}
+.agent-row.merchant{flex-direction:row-reverse}
+.agent-bubble{border:1px solid var(--line);border-radius:11px;padding:8px 10px;max-width:86%;min-width:0;background:rgba(13,24,41,.9)}
+.agent-row.buyer .agent-bubble{border-color:rgba(106,166,255,.28);background:rgba(106,166,255,.055)}
+.agent-row.merchant .agent-bubble{border-color:rgba(245,196,81,.26);background:rgba(245,196,81,.045)}
+.agent-bubble-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.agent-name{font:750 9px var(--mono);letter-spacing:.03em;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
+.agent-action{font:800 7.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:1px 5px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+.agent-row.buyer .agent-action{color:var(--blue);border-color:var(--blue-line);background:var(--blue-dim)}
+.agent-row.merchant .agent-action{color:var(--gold);border-color:var(--gold-line);background:var(--gold-dim)}
+.agent-price{margin-left:auto;font:700 10px var(--mono);color:var(--ink);white-space:nowrap}
+.agent-policy-badge{font:700 7px var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:1px 5px;border-radius:3px;border:1px solid;white-space:nowrap}
+.agent-policy-badge.within{color:var(--emerald);border-color:var(--emerald-line);background:var(--emerald-dim)}
+.agent-policy-badge.policy{color:var(--gold);border-color:var(--gold-line);background:var(--gold-dim)}
+.agent-policy-badge.signed{color:var(--blue);border-color:var(--blue-line);background:var(--blue-dim)}
+.agent-msg{margin-top:5px;font-size:10.5px;line-height:1.55;color:var(--ink-2)}
+.agent-rationale{margin-top:4px;font:600 8.5px/1.5 var(--mono);color:var(--muted-2)}
+.agent-policy-strip{display:flex;align-items:center;gap:6px 9px;flex-wrap:wrap;padding:9px 13px;border-top:1px solid rgba(29,44,68,.75);border-bottom:1px solid rgba(29,44,68,.75);background:rgba(8,16,29,.55);font:600 8.5px/1.5 var(--mono);color:var(--muted);letter-spacing:.01em}
+.agent-policy-strip > svg{width:12px;height:12px;flex:none;color:var(--gold)}
+.agent-policy-strip b{color:var(--ink-2);font-weight:650}
+.policy-lead{color:var(--gold);font-weight:750;text-transform:uppercase;letter-spacing:.06em;font-size:8px}
+.policy-model-note{color:var(--muted-2);flex-basis:100%;font-size:8px}
+.agent-sign-line{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding:9px 13px;font:600 8.5px/1.5 var(--mono);color:var(--muted-2)}
+.agent-sign-line b{color:var(--emerald);font-weight:650;overflow-wrap:anywhere}
+.agent-sign-line .sign-terms{margin-left:auto;color:var(--muted);white-space:nowrap}
+.ai-secondary{padding:0;overflow:hidden}
+.ai-summary{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 12px;cursor:pointer;list-style:none;user-select:none}
+.ai-summary::-webkit-details-marker{display:none}
+.ai-summary > svg{width:14px;height:14px;flex:none;color:var(--emerald)}
+.ai-secondary[open] .ai-summary{border-bottom:1px solid rgba(29,44,68,.5)}
+.ai-body{padding:2px 12px 8px}
+.ai-secondary .ai-move:first-of-type{padding-top:7px}
+
 @keyframes ringPulse{0%,100%{box-shadow:0 0 0 0 rgba(43,217,160,.2)}50%{box-shadow:0 0 0 8px rgba(43,217,160,0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -262,6 +310,9 @@
   .demo-checks{grid-template-columns:1fr}
   .replace-grid{grid-template-columns:1fr}
   .demo-final{align-items:flex-start;flex-direction:column;gap:14px}
+  .agent-chips{grid-template-columns:1fr}
+  .agent-chat{max-height:none}
+  .agent-sign-line .sign-terms{margin-left:0;white-space:normal}
 }
 @media (max-width:560px){
   .demo-scorecard{grid-template-columns:1fr}

@@ -65,7 +65,7 @@ Click **Reset**, then **Run full demo** (or run the five step buttons manually).
 |---|---|---|
 | 1. Trust credential | GET `/api/merchants/m1` | Signed, portable merchant reputation: tier A, score 91, 94% coverage, $5,000 cap, $12,500 reserve |
 | 2. Agent passport | POST `/api/agents/verify` (a1; then a3 RogueBot) | Operator KYB + signed mandate + spend limits + reputation; unverified agent rejected before an order exists |
-| 3. Negotiate | POST `/api/contracts` + `/auto` | Scripted buyer $214 → merchant $237 → accepted at $237; signed contract hash, transcript, terms fixed before PayPal approval |
+| 3. Negotiate | POST `/api/contracts` + `/ai-auto` | **Transparent agent-to-agent chat**: Sam’s personal agent (ProcureBot, $500 mandate) offers $214 → Northwind’s seller agent counters $237 (policy price) → buyer accepts $237. The model writes the words; the policy strip shows allowed prices, mandate and auto-accept; signed contract hash and both signatures below |
 | 4. Protection + PayPal | POST `/api/protection/quote` + order with `contract_id`/`agent_id` | Risk-priced protection: 35 bps, $0.83 fee, $5,000 cap, instant; order at the agreed $237 with the ACC hash |
 | 5. Recourse | POST `/api/orders/:id/claim` | Buyer/agent-initiated claim, **$237 refunded from the merchant reserve in 1.2s**, PayPal refund id, reserve/score updated |
 
@@ -126,7 +126,8 @@ node server.js
 |---|---|
 | **Demo console — start** | ![demo start](screenshots/demo-start.png) |
 | **Demo console — all five axes 8+** | ![demo complete](screenshots/demo-complete.png) |
-| **Demo console — AI negotiation enabled** | ![demo ai](screenshots/demo-ai.png) |
+| **Demo console — transparent agent-to-agent negotiation** | ![demo chat](screenshots/demo-chat.png) |
+| **AI-enabled run** | ![demo ai](screenshots/demo-ai.png) |
 | **Live run — real local AI, PayPal sandbox mode** | ![demo live ai](screenshots/demo-live-ai.png) |
 
 ### 60-second judge path
