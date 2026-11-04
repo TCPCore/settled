@@ -125,6 +125,7 @@ node server.js
 | **Demo console — start** | ![demo start](screenshots/demo-start.png) |
 | **Demo console — all five axes 8+** | ![demo complete](screenshots/demo-complete.png) |
 | **Demo console — AI negotiation enabled** | ![demo ai](screenshots/demo-ai.png) |
+| **Live run — real local AI, PayPal sandbox mode** | ![demo live ai](screenshots/demo-live-ai.png) |
 
 ### 60-second judge path
 
