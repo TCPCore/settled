@@ -1,5 +1,7 @@
 # PayPal AI Hackathon 2026 — fit assessment & 8-day submission plan
 
+> **Status (Nov 4, after the parallel build):** the two P0 gaps are closed in code — real AI negotiation + AI claim explainer (`lib/ai.js`, deterministic fallback) and live PayPal sandbox create/capture/refund (`lib/paypal-flow.js`); demo UI updated; **63/63 e2e pass**. Remaining are environment/account steps only: add a real AI key and PayPal sandbox credentials, dry-run the live flow, record the <3:00 video, push the repo, fill the two Devpost links, and submit.
+
 *Rules as published by PayPal/Devpost (official page is Cloudflare-blocked to automated fetch; cross-checked against the PayPal developer blog and two organizer summaries). Verify the deadline on the Devpost page before submitting.*
 
 **Sources:** [PayPal developer blog](https://developer.paypal.com/community/blog/PayPal_AI_Hackathon/) · [DevGrants Daily summary](https://devgrantsdaily.com/items/2026-10-02-paypal-ai-hackathon-2026/) · [CourseJoiner summary](https://coursejoiner.com/hackathon/paypal-ai-hackathon-2026/) · [Official Devpost](https://paypalaihackathon.devpost.com/)

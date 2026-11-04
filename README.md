@@ -81,10 +81,12 @@ The server then creates real sandbox Orders and the demo shows an **Open PayPal 
 
 ## Hackathon submission (PayPal AI Hackathon 2026)
 
-The repo is the submission: working prototype + MIT license + Devpost text + a <3:00 video. Rules, deadline and checklist: **[SUBMISSION-PLAN.md](SUBMISSION-PLAN.md)** — submissions close **Nov 12, 2026, 2:00 PM PT**; confirm on the Devpost page before submitting.
+The repo is the submission: working prototype + MIT license + Devpost text + a <3:00 video. The **build spec** (frozen AI negotiation + PayPal sandbox interfaces) and the **submission plan** (rules, deadline **Nov 12, 2026, 2:00 PM PT**, checklist) are linked in the table below.
 
 | Artifact | Where |
 |---|---|
+| Build spec — frozen AI + PayPal interfaces this was built against | **[AI-PAYPAL-BUILD-SPEC.md](AI-PAYPAL-BUILD-SPEC.md)** |
+| Rules, deadline (Nov 12, 2026, 2:00 PM PT), submission checklist | **[SUBMISSION-PLAN.md](SUBMISSION-PLAN.md)** |
 | Devpost text (inspiration → how we built it → SIM vs live) | **[DEVPOST.md](DEVPOST.md)** |
 | Video shot list, exact lines, fallbacks (<3:00) | **[VIDEO-SCRIPT.md](VIDEO-SCRIPT.md)** |
 | Story, novelty audit, PayPal money case | **[WRITEUP.md](WRITEUP.md)** |
