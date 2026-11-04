@@ -207,7 +207,7 @@ The claim flow is the point: a buyer taps **Report a problem**, checks the evide
 
 ## Build notes & test status
 
-- **E2E: 63/63 pass.** `npm test` (spawns its own server on 4173, resets seed at start and end).
+- **E2E: 63/63 pass.** `npm test` (spawns its own server on 4400, resets seed at start and end).
 - **Risk constants were re-fit** from the spec's literal weights so the seed table reproduces exactly (91/76/54); the five component formulas and weighted-sum shape are unchanged. Documented in `lib/risk.js`.
 - `POST /api/merchants/:id/orders` returns **200** (the spec enumerates only 400/404/409; QA accepts 200/201).
 - `fulfill` sets `status: "delivered"`; a second fulfill returns **409**.
