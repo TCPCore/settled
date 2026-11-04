@@ -133,7 +133,7 @@ Every failure prints the assertion that broke and either the exact response body
 
 - **Passport `sig`.** §1 lists `sig` inside the passport credential while §2 returns `{credential, signature, alg}`. T43 requires **both**: the envelope signature *and* `credential.sig` (a portable credential must carry its own signature).
 - **Tamper verification.** T43 posts a mutated credential plus the original signature to `POST /api/agents/verify`. The backend accepts a caller-supplied `{credential, signature}` and returns `verified:false`; if a build ignores the body, the test still passes but reports `tamper NOT exercised` in the detail — do not lose that behaviour, it is the demo's assurance claim.
-- **`/auto` price is under-specified.** §2's scripted path is written as `~$236.55?` in the demo narrative; the implementation returns `round(249 × 0.95) = 237`. T45 asserts `agreed_price` is inside `[floor, list]` and within ±$2.5 of 95%.
+- **`/auto` price is under-specified.** §2's scripted path is written as `~$237.00?` in the demo narrative; the implementation returns `round(249 × 0.95) = 237`. T45 asserts `agreed_price` is inside `[floor, list]` and within ±$2.5 of 95%.
 - **Offer above mandate** returns 400 `MANDATE_EXCEEDED`; the task allowed 400 or 409.
 - **Round expiry** lands on the 5th offer (`rounds 5 > max_rounds 4`), per §2's "> max_rounds"; later offers return 409 `CONTRACT_NOT_OPEN`.
 - **Order status code** for contract/agent orders is 200 (not 201); accepted. A **claim refund equals the agreed price**, not the list price.

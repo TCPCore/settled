@@ -86,7 +86,7 @@ Single page, dark fintech, no external assets, uses `styles.css` + `Settled` hel
 **Steps (left column buttons / auto-advance):**
 1. **Trust credential** — GET m1 detail; show tier A, score 91, coverage 94%, cap $5,000, reserve $12,500, VC JSON; mark Trust.
 2. **Agent passport** — select a1; POST agents/verify; show operator/kyb/capabilities/limits/reputation + checks; also a "Try RogueBot" button → rejected; mark Identity.
-3. **Negotiate** — POST contracts (m1,p1,a1); POST auto; show transcript (list $249 → offer $214 → counter $237 → offer $236.55? → accepted at $236.55?); show signed contract hash and terms; mark Negotiation.
+3. **Negotiate** — POST contracts (m1,p1,a1); POST auto; show transcript (list $249 → offer $214 → counter $237 → offer $237.00? → accepted at $237.00?); show signed contract hash and terms; mark Negotiation.
 4. **Protection + PayPal** — POST protection/quote (amount=agreed); then POST orders with contract_id+agent_id; show fee bps/fee/cap/mode, order id, payment id, receipt/ACC hash. If server is in live PayPal mode and returns approval_url, show a "Open PayPal approval" link; otherwise show SIM.
 5. **Recourse** — POST claim on the order (reason not_delivered, evidence true); show refund $X, paid from reserve, PayPal refund id, SLA 1.2s, reserve before/after, score/tier update; mark Recourse.
 

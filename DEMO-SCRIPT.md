@@ -28,7 +28,7 @@ Click **2 · Agent passport**. Then click **Try RogueBot**.
 
 Click **3 · Negotiate**.
 
-> "The list price is $249. The buyer agent offers $214; the merchant agent counters at $236.55; the buyer accepts. Both sides sign one contract — price, delivery, returns, transcript hash. The amount is agreed **before** PayPal approval, so the buyer approves exactly what was negotiated."
+> "The list price is $249. The buyer agent offers $214; the merchant agent counters at $237.00; the buyer accepts. Both sides sign one contract — price, delivery, returns, transcript hash. The amount is agreed **before** PayPal approval, so the buyer approves exactly what was negotiated."
 
 ## 1:35 — Step 4: price the protection and pay (30s)
 
@@ -42,7 +42,7 @@ If live: click **Open PayPal approval**, approve in sandbox, come back — show 
 
 Click **5 · Recourse**.
 
-> "The parcel never arrives. The agent files a claim with evidence. The refund — $236.55 — is paid from the merchant's own reserve in about 1.2 seconds, through the PayPal refund API. The reserve drops to $12,263.45. No chargeback, no support queue, no 30-day wait."
+> "The parcel never arrives. The agent files a claim with evidence. The refund — $237.00 — is paid from the merchant's own reserve in about 1.2 seconds, through the PayPal refund API. The reserve drops to $12,263.00. No chargeback, no support queue, no 30-day wait."
 
 ## 2:35 — The payoff (25s)
 

@@ -29,7 +29,7 @@
 |---|---|---|
 | **PayPal sandbox integration** | `lib/paypal.js` implements OAuth + Orders v2 create/capture + approval URL; `/api/paypal/capture`; SIM fallback. **The demo defaults to SIM and the live approval/return flow has not been exercised.** | ⚠️ **At risk** — must run real sandbox orders in the video and show real IDs |
 | **AI in the core** | Agent passports, negotiation policy, risk engine, claim adjudication are **deterministic**, not a model. The "agents" are automated but not AI/ML. | ⚠️ **At risk** — judges may rule the AI requirement unmet |
-| **Working prototype** | Node app, 5-step demo console, dashboard, agent console, 57/57 e2e tests, screenshots | ✅ **Strong** |
+| **Working prototype** | Node app, 5-step demo console, dashboard, agent console, 63/63 e2e tests, screenshots | ✅ **Strong** |
 | **Public repo + license** | Code exists locally; **no git repo, no LICENSE** | ❌ **Must do** |
 | **Demo video <3 min** | None | ❌ **Must do** |
 | **Devpost text** | `WRITEUP.md`, `JUDGE-BRIEF.md`, `HACKATHON-PROOF.md` ready to adapt | ✅ **Easy** |

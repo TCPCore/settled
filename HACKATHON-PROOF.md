@@ -99,7 +99,7 @@ This is the honest audit, not the pitch.
 | Criterion | Evidence to show | Where |
 |---|---|---|
 | **Innovation / novelty** | Not a badge or chargeback guarantee: outcome-signed portable credential + risk-priced protection + instant reserve payout + agent API. The three legs no incumbent holds together | Steps 1–5; prior-art audit |
-| **Technical execution** | Working zero-dependency demo; PayPal Orders v2 path; HMAC credential + hash chain; agent passport; contract signing; risk tiers; instant claim; **57/57 e2e tests** | `/demo.html`, `npm test` |
+| **Technical execution** | Working zero-dependency demo; PayPal Orders v2 path; HMAC credential + hash chain; agent passport; contract signing; risk tiers; instant claim; **63/63 e2e tests** | `/demo.html`, `npm test` |
 | **Business viability** | 51% abandon on legitimacy; $1.3B protection cost centre; bps pricing; platform license; agent API; 90-day test plan | Pitch 2:35–3:20; [VALUE-PROPOSITION.md](VALUE-PROPOSITION.md) |
 | **Demo quality** | 5-step console, deterministic, SIM fallback, JSON log, reset | `/demo.html` |
 | **Impact** | Merchant: conversion + bounded loss. Buyer: seconds-to-refund. Agent: passport + remedy. PayPal: new fee SKU + take-rate defense | All steps |
@@ -120,7 +120,7 @@ This is the honest audit, not the pitch.
 8. **"What if PayPal builds it?"** → Best case: partner/acquire. We plug into Orders, Refunds, Webhooks, Agent Toolkit/MCP. The trust layer is neutral and portable; PayPal's data makes it stronger, not weaker.
 9. **"Where does the money for claims come from?"** → Merchant reserve/LC/insurer, not a demo pool. No custody: the reserve stays with the merchant's PSP or an insurer; caps are reserve × factor; a backtested loss curve precedes "instant."
 10. **"How do you prevent gaming?"** → Only payment-settled, carrier-confirmed, matured outcomes count; identity at the beneficial-owner level; coverage disclosure; collateral before trust; buyer/agent reputation; graph detection; caps.
-11. **"What's your evidence?"** → 57/57 e2e tests and a working demo today; pre-revenue, with a pre-registered 30-day test plan. We show the test cards, not just the deck.
+11. **"What's your evidence?"** → 63/63 e2e tests and a working demo today; pre-revenue, with a pre-registered 30-day test plan. We show the test cards, not just the deck.
 12. **"Market size?"** → $1.3B protection provision/$1.49B losses inside PayPal; 51% abandonment on legitimacy; agentic checkout is the new surface. The wedge is the protected-GMV bps, not the TAM slide.
 13. **"Regulatory/insurance?"** → No custody, merchant-funded guarantee, insurer/LC partner, counsel memo; not consumer credit reporting. We treat licensing as a gating workstream, not an afterthought.
 14. **"Why now?"** → AI fake stores, AI fake reviews, agentic checkout entering PayPal's rails, and a standards gap for trust/recourse. The rail is here; the assurance isn't.
@@ -158,7 +158,7 @@ This is the honest audit, not the pitch.
 
 | Time | Do | Owner |
 |---|---|---|
-| **T-48h** | Freeze scope. Run `npm test` (57/57). Fix only blockers. Record backup video | QA / Lead |
+| **T-48h** | Freeze scope. Run `npm test` (63/63). Fix only blockers. Record backup video | QA / Lead |
 | **T-36h** | Rehearse the 4-minute script 3× with a timer; trim to 3:45 | Presenter |
 | **T-24h** | Update judge brief + screenshots; reset seed; **no new features** | Lead |
 | **T-12h** | Dress rehearsal on the projector; Q&A drill; check audio | Whole team |
@@ -190,7 +190,7 @@ This is the honest audit, not the pitch.
 
 - **Problem:** 51% abandon on business legitimacy (TrustedSite 2026); 96% concerned about unfamiliar sites; 94% fear AI fake businesses; 91% fear AI fake reviews.
 - **PayPal:** $1.34B protection provision / $1.49B realized losses (FY2025 10-K); $1.79T TPV; branded checkout 30% of TPV / >65% of transaction GP.
-- **Demo:** 57/57 e2e; 5/5 axes; $237 refund in 1.2s; 35/90/150 bps; $5k cap; 94% coverage; reserve $12,500.
+- **Demo:** 63/63 e2e; 5/5 axes; $237 refund in 1.2s; 35/90/150 bps; $5k cap; 94% coverage; reserve $12,500.
 - **Targets to test:** ≥5% relative conversion lift on new buyers; 3/12 LOIs at ≥25 bps; time-to-refund <1 day; claim cost <50% of chargeback cost.
 
 ---

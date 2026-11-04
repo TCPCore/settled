@@ -42,7 +42,7 @@ Seeded merchants:
 
 ## The write-up (novelty, money, niche, USP, pitch, demo reality)
 
-**[WRITEUP.md](WRITEUP.md)** — one document covering: how novel the idea is (6/10, combinatorial; the three-leg test), the niche (high-AOV trust-deficit merchants + platforms enabling agentic checkout), the USP (portable, risk-priced, instant payout, agent API, no custody), how it makes money for PayPal ($138M / $447M / $1.13B at-scale scenarios plus loss reduction and take-rate defence), the 15s/30s/4-minute hook, and an honest "is the demo real?" audit (real logic + 57/57 tests; simulated money by default; live PayPal sandbox path one env var away).
+**[WRITEUP.md](WRITEUP.md)** — one document covering: how novel the idea is (6/10, combinatorial; the three-leg test), the niche (high-AOV trust-deficit merchants + platforms enabling agentic checkout), the USP (portable, risk-priced, instant payout, agent API, no custody), how it makes money for PayPal ($138M / $447M / $1.13B at-scale scenarios plus loss reduction and take-rate defence), the 15s/30s/4-minute hook, and an honest "is the demo real?" audit (real logic + 63/63 tests; simulated money by default; live PayPal sandbox path one env var away).
 
 ## Before the hackathon: the Strategyzer-grounded playbook
 
@@ -120,6 +120,7 @@ node server.js
 |---|---|
 | **Demo console — start** | ![demo start](screenshots/demo-start.png) |
 | **Demo console — all five axes 8+** | ![demo complete](screenshots/demo-complete.png) |
+| **Demo console — AI negotiation enabled** | ![demo ai](screenshots/demo-ai.png) |
 
 ### 60-second judge path
 
@@ -201,7 +202,7 @@ The claim flow is the point: a buyer taps **Report a problem**, checks the evide
 
 ## Build notes & test status
 
-- **E2E: 57/57 pass.** `npm test` (spawns its own server on 4173, resets seed at start and end).
+- **E2E: 63/63 pass.** `npm test` (spawns its own server on 4173, resets seed at start and end).
 - **Risk constants were re-fit** from the spec's literal weights so the seed table reproduces exactly (91/76/54); the five component formulas and weighted-sum shape are unchanged. Documented in `lib/risk.js`.
 - `POST /api/merchants/:id/orders` returns **200** (the spec enumerates only 400/404/409; QA accepts 200/201).
 - `fulfill` sets `status: "delivered"`; a second fulfill returns **409**.

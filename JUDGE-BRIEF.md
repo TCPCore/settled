@@ -44,7 +44,7 @@ Trust credential (m1: tier A, 91, 94% coverage, $5,000 cap, $12,500 reserve) →
 
 ## Evidence today / what is simulated
 
-- **Real:** risk engine, HMAC credential + hash chain, reserve accounting, claims, agent passport, contract signing, PayPal Orders adapter, **57/57 e2e tests**.
+- **Real:** risk engine, HMAC credential + hash chain, reserve accounting, claims, agent passport, contract signing, PayPal Orders adapter, **63/63 e2e tests**.
 - **Simulated:** payment ids and delivery in SIM mode; the $25k pool is a demo pool. **Production:** insurer/LC-backed reserve, carrier delivery evidence, counsel/insurance workstreams. Say this before a judge asks.
 - **Pre-revenue, pre-traction:** the next 30 days are pre-registered tests — 12 merchant interviews, 3/12 LOIs at ≥25 bps, a holdout conversion test (≥5% relative lift), a 20-claim concierge pilot, and one insurer term sheet.
 
