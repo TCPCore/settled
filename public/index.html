@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settled — merchant dashboard</title>
+<meta name="description" content="Signed merchant trust ledger, risk pricing and instant settlement — Settled merchant dashboard.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="dashboard">
+<div class="bg" aria-hidden="true"></div>
+
+<header class="topnav">
+  <div class="topnav-in">
+    <a class="brand" href="index.html" aria-label="Settled home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.4 20.4 7v10L12 21.6 3.6 17V7L12 2.4Z" fill="#2BD9A0" fill-opacity=".16" stroke="#2BD9A0" stroke-width="1.3"/><path d="m8.3 12.2 2.4 2.4 5-5.2" stroke="#2BD9A0" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="brand-copy"><b>Settled</b><small>trust settlement</small></span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html" data-nav="dashboard">Dashboard</a>
+      <a href="store.html" data-nav="store">Storefront</a>
+      <a href="agent.html" data-nav="agent">Agent console</a>
+      <a href="demo.html" data-nav="demo">Demo</a>
+    </nav>
+    <div class="nav-side">
+      <span class="env-pill" id="envPill"><span class="dot"></span><span id="envLabel">SIM</span></span>
+      <span class="nav-merchant" id="navMerchant" hidden><span id="navMerchantName">—</span><i class="tier tier-c" id="navMerchantTier">?</i></span>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <div class="dashboard-grid">
+    <aside class="sidebar" aria-label="Merchant navigation">
+      <section class="panel">
+        <div class="panel-head compact">
+          <div class="panel-title">Merchants</div>
+          <span class="badge" id="merchantCount">3</span>
+        </div>
+        <div class="merchant-list" id="merchantList" aria-label="Switch merchant">
+          <div class="merchant-btn"><div class="skeleton merchant-avatar"></div><div class="merchant-text"><div class="skeleton sk-line" style="width:70%"></div><div class="skeleton sk-line" style="width:45%;margin-top:6px"></div></div></div>
+          <div class="merchant-btn"><div class="skeleton merchant-avatar"></div><div class="merchant-text"><div class="skeleton sk-line" style="width:60%"></div><div class="skeleton sk-line" style="width:40%;margin-top:6px"></div></div></div>
+          <div class="merchant-btn"><div class="skeleton merchant-avatar"></div><div class="merchant-text"><div class="skeleton sk-line" style="width:65%"></div><div class="skeleton sk-line" style="width:42%;margin-top:6px"></div></div></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="side-links">
+          <a class="side-link" data-link="store.html" href="store.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9 5 4h14l1 5v2H4V9Z"/><path d="M6 11v9h12v-9"/><path d="M10 20v-5h4v5"/></svg>
+            Storefront <span id="sideStoreRate">→</span>
+          </a>
+          <a class="side-link" data-link="agent.html" href="agent.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/><circle cx="12" cy="12" r="2.5"/></svg>
+            Agent console <span>→</span>
+          </a>
+        </div>
+        <div class="side-foot">
+          <button class="btn btn-danger btn-sm btn-block" id="resetBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v6h-6"/></svg>
+            Reset demo data
+          </button>
+          <div class="side-note">Reseeds merchants, orders, reserves and ledger events. State is in-memory only.</div>
+        </div>
+      </section>
+
+      <div class="side-note">Every credential in this dashboard is HMAC-signed with a per-process key. Restarting the server rotates the key.</div>
+    </aside>
+
+    <section class="main">
+      <div id="apiError" class="panel api-error" hidden></div>
+
+      <div id="dashboardBody">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">Operations</div>
+            <h1 class="page-title">Trust dashboard</h1>
+            <p class="page-sub">A signed, portable reputation ledger that prices buyer protection per merchant — and settles claims instantly.</p>
+          </div>
+          <div class="page-side">
+            <span class="badge" id="updatedBadge">loading</span>
+            <button class="btn btn-ghost btn-sm" id="refreshBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v6h-6"/></svg>
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <section class="panel merchant-head" aria-live="polite">
+          <div class="mh-top">
+            <div style="min-width:0">
+              <div class="eyebrow" id="mhCategory">Merchant</div>
+              <div class="mh-name" id="mhName"><span class="skeleton sk-title" style="width:260px;display:inline-block"></span></div>
+              <div class="mh-meta" id="mhMeta"><span class="skeleton sk-line" style="width:200px"></span></div>
+              <div class="mh-chips" id="mhChips"></div>
+            </div>
+            <div class="dial" id="scoreDial"></div>
+          </div>
+          <div class="mh-facts" id="mhFacts"></div>
+        </section>
+
+        <div class="stat-grid" id="statGrid" aria-live="polite"></div>
+
+        <div class="two-col">
+          <section class="panel">
+            <div class="panel-head">
+              <div style="min-width:0">
+                <div class="panel-title">Signed ledger <span class="badge" id="ledgerAlg">HS256</span></div>
+                <div class="panel-sub">Portable credential an agent can verify without asking the merchant.</div>
+              </div>
+              <div class="head-actions">
+                <button class="btn btn-ghost btn-sm" id="copyLedgerBtn" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                  Copy JSON
+                </button>
+                <button class="btn btn-primary btn-sm" id="verifyBtn" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v6c0 4.6 3 7.6 7 9 4-1.4 7-4.4 7-9V6l-7-3Z"/><polyline points="9 12 11.2 14.2 15.4 10"/></svg>
+                  Verify signature
+                </button>
+              </div>
+            </div>
+            <div class="ledger-meta" id="ledgerMeta"><span class="skeleton sk-line" style="width:60%"></span></div>
+            <div class="json-wrap"><pre class="json" id="ledgerJson" aria-label="Signed credential JSON"><span class="skeleton" style="display:block;height:190px"></span></pre></div>
+            <div class="ledger-sign" id="ledgerSign"><span class="lbl">signature</span><code class="skeleton" style="width:70%;height:10px;display:inline-block"></code></div>
+            <div class="verify-result hidden" id="verifyResult" aria-live="polite"></div>
+            <div class="panel-foot"><span id="ledgerFoot">Signing algorithm HS256 · per-process key</span><span class="mono" id="ledgerIssued"></span></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div style="min-width:0">
+                <div class="panel-title">Events</div>
+                <div class="panel-sub">Hash-chained ledger trail · latest 20</div>
+              </div>
+              <span class="badge" id="eventCount">0</span>
+            </div>
+            <div class="timeline" id="eventList" aria-live="polite">
+              <div class="event"><div class="event-dot"><span class="skeleton" style="width:12px;height:12px"></span></div><div class="event-body"><div class="sk-line skeleton" style="width:45%"></div><div class="sk-line skeleton" style="width:80%;margin-top:8px"></div></div></div>
+              <div class="event"><div class="event-dot"><span class="skeleton" style="width:12px;height:12px"></span></div><div class="event-body"><div class="sk-line skeleton" style="width:35%"></div><div class="sk-line skeleton" style="width:70%;margin-top:8px"></div></div></div>
+              <div class="event"><div class="event-dot"><span class="skeleton" style="width:12px;height:12px"></span></div><div class="event-body"><div class="sk-line skeleton" style="width:50%"></div><div class="sk-line skeleton" style="width:76%;margin-top:8px"></div></div></div>
+            </div>
+            <div class="panel-foot"><span>Newest first · seq desc</span><span class="mono" id="eventHeadHash">—</span></div>
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div style="min-width:0">
+              <div class="panel-title">Orders</div>
+              <div class="panel-sub">Latest protected purchases for this merchant.</div>
+            </div>
+            <div class="head-actions">
+              <span class="badge" id="orderCount">0</span>
+              <a class="btn btn-ghost btn-sm" id="storeLinkBtn" href="store.html" data-link="store.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9 5 4h14l1 5v2H4V9Z"/><path d="M6 11v9h12v-9"/><path d="M10 20v-5h4v5"/></svg>
+                Open storefront
+              </a>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Order</th><th>Product</th><th>Buyer</th><th>Amount</th><th>Fee</th><th>Protection</th><th>Status</th><th>Created</th><th style="text-align:right">Actions</th></tr>
+              </thead>
+              <tbody id="ordersBody">
+                <tr><td colspan="9"><div class="skeleton" style="height:120px"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="panel-foot"><span id="ordersFoot">—</span><span class="mono">Buyer protection settles from the seller reserve</span></div>
+        </section>
+      </div>
+
+      <footer class="footer">
+        <span><b>Settled</b> · trust settlement prototype · simulated payments</span>
+        <span class="foot-links"><a href="store.html">Storefront</a><a href="agent.html">Agent console</a><a href="index.html">Dashboard</a></span>
+      </footer>
+    </section>
+  </div>
+</main>
+
+<div class="toast-host" id="toastHost" aria-live="polite"></div>
+<noscript><div class="panel" style="margin:20px;padding:18px">Settled needs JavaScript enabled.</div></noscript>
+
+<script src="app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var S = window.Settled;
+
+  var state = {
+    merchantId: null,
+    merchants: [],
+    merchant: null,
+    ledger: null,
+    events: [],
+    orders: [],
+    health: null,
+    loading: false
+  };
+
+  var el = {
+    apiError: document.getElementById('apiError'),
+    body: document.getElementById('dashboardBody'),
+    merchantList: document.getElementById('merchantList'),
+    merchantCount: document.getElementById('merchantCount'),
+    updated: document.getElementById('updatedBadge'),
+    refresh: document.getElementById('refreshBtn'),
+    reset: document.getElementById('resetBtn'),
+    name: document.getElementById('mhName'),
+    category: document.getElementById('mhCategory'),
+    meta: document.getElementById('mhMeta'),
+    chips: document.getElementById('mhChips'),
+    dial: document.getElementById('scoreDial'),
+    facts: document.getElementById('mhFacts'),
+    stats: document.getElementById('statGrid'),
+    ledgerAlg: document.getElementById('ledgerAlg'),
+    ledgerMeta: document.getElementById('ledgerMeta'),
+    ledgerJson: document.getElementById('ledgerJson'),
+    ledgerSign: document.getElementById('ledgerSign'),
+    ledgerIssued: document.getElementById('ledgerIssued'),
+    ledgerFoot: document.getElementById('ledgerFoot'),
+    copyLedger: document.getElementById('copyLedgerBtn'),
+    verify: document.getElementById('verifyBtn'),
+    verifyResult: document.getElementById('verifyResult'),
+    eventList: document.getElementById('eventList'),
+    eventCount: document.getElementById('eventCount'),
+    eventHeadHash: document.getElementById('eventHeadHash'),
+    ordersBody: document.getElementById('ordersBody'),
+    orderCount: document.getElementById('orderCount'),
+    ordersFoot: document.getElementById('ordersFoot'),
+    storeRate: document.getElementById('sideStoreRate')
+  };
+
+  S.mountNav('dashboard');
+
+  function initials(name) {
+    var parts = String(name || '').trim().split(/\s+/);
+    return (parts[0] ? parts[0][0] : '') + (parts[1] ? parts[1][0] : '');
+  }
+  function modeBadge(mode) {
+    var m = S.modeInfo(mode);
+    return '<span class="mode ' + m.cls + '">' + S.esc(m.short) + '</span>';
+  }
+  function tierBadge(tier) {
+    var t = S.tierInfo(tier);
+    return '<span class="tier ' + t.cls + '">' + S.esc(tier || '?') + '</span>';
+  }
+  function metric(m, ledger, key) { return S.metric(m, ledger, key); }
+
+  function setUpdated(text) {
+    if (el.updated) el.updated.textContent = text || 'updated now';
+  }
+
+  function showLoading() {
+    el.body.hidden = false;
+    el.apiError.hidden = true;
+    el.updated.textContent = 'loading';
+    el.refresh.disabled = true;
+  }
+
+  function renderSidebar() {
+    el.merchantCount.textContent = String(state.merchants.length);
+    el.merchantList.innerHTML = state.merchants.map(function (m) {
+      var active = m.id === state.merchantId;
+      var t = S.tierInfo(m.tier);
+      return '<button class="merchant-btn' + (active ? ' is-active' : '') + '" type="button" data-merchant="' + S.esc(m.id) + '"' + (active ? ' aria-current="true"' : '') + '>' +
+        '<span class="merchant-avatar">' + S.esc(initials(m.name)) + '</span>' +
+        '<span class="merchant-text"><span class="merchant-name">' + S.esc(m.name) + '</span><span class="merchant-domain">' + S.esc(m.domain || '') + '</span></span>' +
+        '<span class="merchant-score"><span class="tier ' + t.cls + '">' + S.esc(m.tier || '?') + '</span><span style="margin-left:6px">' + S.esc(m.score !== undefined ? m.score : '—') + '</span></span>' +
+      '</button>';
+    }).join('');
+    Array.prototype.forEach.call(el.merchantList.querySelectorAll('[data-merchant]'), function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-merchant');
+        if (!id || id === state.merchantId || state.loading) return;
+        state.merchantId = id;
+        S.setQuery('merchant', id);
+        S.setMerchantLinks(id);
+        renderSidebar();
+        loadMerchant(id);
+      });
+    });
+  }
+
+  function renderHeader() {
+    var m = state.merchant;
+    var met = m.metrics || {};
+    var t = S.tierInfo(m.tier);
+    el.category.textContent = (m.category || 'Merchant') + ' · ' + (m.id || '');
+    el.name.textContent = m.name || 'Unknown merchant';
+    el.meta.innerHTML = '<span class="mono">' + S.esc(m.domain || '—') + '</span><span class="dot"></span><span>Tier ' + S.esc(m.tier || '?') + ' · ' + S.esc(t.desc) + '</span><span class="dot"></span><span>' + S.esc(m.category || '') + '</span>';
+    var memberDays = metric(m, state.ledger, 'age_days');
+    el.chips.innerHTML = tierBadge(m.tier) + ' ' + modeBadge(m.mode) +
+      (memberDays !== null ? '<span class="badge">' + S.esc(S.num(memberDays)) + ' days on Settled</span>' : '') +
+      '<span class="badge emerald">' + S.icon('shield') + ' protection ' + S.esc(S.money(m.cap)) + '</span>';
+    el.dial.innerHTML = S.ring(m.score, m.tier, 124);
+    el.facts.innerHTML =
+      '<div class="fact"><div class="fact-label">Protection fee</div><div class="fact-value">' + S.esc(m.fee_bps !== undefined ? m.fee_bps : '—') + '<span class="unit">bps</span></div></div>' +
+      '<div class="fact"><div class="fact-label">Protection cap</div><div class="fact-value">' + S.esc(S.money(m.cap)) + '</div></div>' +
+      '<div class="fact"><div class="fact-label">Reserve</div><div class="fact-value">' + S.esc(S.money(m.reserve)) + '</div></div>' +
+      '<div class="fact"><div class="fact-label">Payment mode</div><div class="fact-value" style="font-size:12px">' + modeBadge(m.mode) + '</div></div>';
+  }
+
+  function renderStats() {
+    var m = state.merchant;
+    var ledger = state.ledger;
+    var cards = [
+      { label: 'Orders', key: 'orders', fmt: S.num, sub: 'orders processed', tone: '' },
+      { label: 'Delivered', key: 'delivered_pct', fmt: S.pct, sub: 'delivered on time', tone: '' },
+      { label: 'As described', key: 'as_described_pct', fmt: S.pct, sub: 'item matches listing', tone: '' },
+      { label: 'Dispute rate', key: 'dispute_rate_pct', fmt: S.pct, sub: 'buyer disputes', tone: 'gold' },
+      { label: 'Chargeback rate', key: 'chargeback_rate_pct', fmt: S.pct, sub: 'card chargebacks', tone: 'gold' },
+      { label: 'Avg delivery', key: 'avg_delivery_days', fmt: function (v) { return Number(v).toFixed(1) + ' d'; }, sub: 'to buyer door', tone: '' }
+    ];
+    el.stats.innerHTML = cards.map(function (c) {
+      var v = metric(m, ledger, c.key);
+      return '<div class="stat ' + c.tone + '"><div class="stat-label"><i></i>' + S.esc(c.label) + '</div>' +
+        '<div class="stat-value">' + (v === null || v === undefined ? '—' : S.esc(c.fmt(v))) + '</div>' +
+        '<div class="stat-sub">' + S.esc(c.sub) + '</div></div>';
+    }).join('');
+  }
+
+  function renderLedger() {
+    var ledger = state.ledger;
+    if (!ledger || !ledger.credential) {
+      el.ledgerJson.innerHTML = '<div class="empty"><strong>No ledger yet</strong>This merchant has no signed credential.</div>';
+      el.ledgerMeta.innerHTML = '';
+      el.ledgerSign.innerHTML = '';
+      return;
+    }
+    var cred = ledger.credential;
+    var sig = ledger.signature || '';
+    el.ledgerAlg.textContent = ledger.alg || 'HS256';
+    el.ledgerJson.innerHTML = S.syntax(cred);
+    el.ledgerMeta.innerHTML =
+      '<span>evidence_hash</span><span class="hash">' + S.esc(S.shortHash(cred.evidence_hash, 20)) + '</span>' +
+      '<span class="sep"></span><span>issued ' + S.esc(S.dateFmt(cred.issued_at)) + '</span>' +
+      '<span class="sep"></span><span>expires ' + S.esc(S.dateFmt(cred.expires_at)) + '</span>';
+    el.ledgerSign.innerHTML = '<span class="lbl">signature</span><code>' + S.esc(sig || '—') + '</code>';
+    el.ledgerIssued.textContent = 'expires ' + S.dateFmt(cred.expires_at);
+    el.ledgerFoot.textContent = 'Signing algorithm ' + (ledger.alg || 'HS256') + ' · per-process key';
+    el.verifyResult.className = 'verify-result hidden';
+    el.verifyResult.innerHTML = '';
+    el.copyLedger.onclick = function () { S.copyText(JSON.stringify(cred, null, 2), 'Credential JSON'); };
+  }
+
+  function renderEvents() {
+    var events = state.events;
+    el.eventCount.textContent = String(events.length);
+    if (events.length && events[0].hash) el.eventHeadHash.textContent = 'head ' + S.shortHash(events[0].hash, 10);
+    else el.eventHeadHash.textContent = '—';
+    if (!events.length) {
+      el.eventList.innerHTML = S.emptyState('No events yet', 'Create a protected order or file a claim and the hash-chained trail will appear here.');
+      return;
+    }
+    el.eventList.innerHTML = events.map(function (e) {
+      var type = S.eventType(e);
+      var tone = S.eventTone(type);
+      return '<div class="event">' +
+        '<div class="event-dot ' + tone + '">' + S.icon(S.eventIcon(type)) + '</div>' +
+        '<div class="event-body">' +
+          '<div class="event-top"><span class="chip chip-type-' + S.esc(type) + ' chip-tone-' + S.esc(tone) + '">' + S.esc(type.replace(/_/g, ' ')) + '</span>' +
+            '<span class="event-time">' + S.esc(S.timeAgo(e.created_at || e.ts || e.time)) + '</span></div>' +
+          '<div class="event-text">' + S.eventSummary(e, state.merchant) + '</div>' +
+          '<div class="event-meta"><span>#' + S.esc(e.seq !== undefined ? e.seq : '—') + '</span>' +
+            '<span class="hash">hash ' + S.esc(S.shortHash(e.hash, 14)) + '</span>' +
+            (e.prev_hash ? '<span>prev ' + S.esc(S.shortHash(e.prev_hash, 8)) + '</span>' : '') + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderOrders() {
+    var orders = state.orders.slice(0, 8);
+    el.orderCount.textContent = String(state.orders.length);
+    el.ordersFoot.textContent = state.orders.length ? ('Showing latest ' + orders.length + ' of ' + state.orders.length + ' orders') : 'No orders';
+    if (!orders.length) {
+      el.ordersBody.innerHTML = '<tr><td colspan="9">' + S.emptyState('No orders yet', 'Open the storefront and buy with protection to create the first order.') + '</td></tr>';
+      return;
+    }
+    el.ordersBody.innerHTML = orders.map(function (o) {
+      var st = S.statusInfo(o.status);
+      var prot = o.protection || {};
+      var canDeliver = o.status === 'paid';
+      var canClaim = o.status === 'paid' || o.status === 'delivered';
+      var actions = '';
+      if (canDeliver) actions += '<button class="btn btn-ghost btn-sm" type="button" data-action="deliver" data-order="' + S.esc(o.id) + '">' + S.icon('truck') + 'Simulate delivery</button>';
+      if (canClaim) actions += '<button class="btn btn-ghost btn-sm" type="button" data-action="claim" data-order="' + S.esc(o.id) + '">' + S.icon('flag') + 'Report a problem</button>';
+      if (!actions) actions = '<span class="tiny muted">settled</span>';
+      var buyer = (o.buyer && (o.buyer.name || o.buyer.email)) || '—';
+      return '<tr>' +
+        '<td><span class="id" title="' + S.esc(o.id) + '">' + S.esc(S.shortHash(o.id, 10)) + '</span></td>' +
+        '<td><span class="product">' + S.esc(o.product_name || 'Product') + '</span></td>' +
+        '<td>' + S.esc(buyer) + '</td>' +
+        '<td class="amount">' + S.esc(S.money(o.amount)) + '</td>' +
+        '<td><span class="mono" style="color:var(--muted)">' + S.esc(S.money(o.fee)) + '</span><div class="tiny muted">' + S.esc(o.fee_bps !== undefined ? o.fee_bps : '—') + ' bps</div></td>' +
+        '<td>' + modeBadge(prot.mode || state.merchant.mode) + '<div class="tiny muted">up to ' + S.esc(S.money(prot.cap !== undefined ? prot.cap : state.merchant.cap)) + '</div></td>' +
+        '<td><span class="status ' + st.cls + '">' + S.esc(st.label) + '</span></td>' +
+        '<td><span class="date" title="' + S.esc(o.created_at || '') + '">' + S.esc(S.dateFmt(o.created_at)) + '</span></td>' +
+        '<td class="actions"><span class="order-actions">' + actions + '</span></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderStats();
+    renderLedger();
+    renderEvents();
+    renderOrders();
+    S.setNavMerchant(state.merchant);
+    S.setMerchantLinks(state.merchantId);
+    el.storeRate.textContent = '→';
+    setUpdated('updated ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }));
+    el.refresh.disabled = false;
+  }
+
+  function loadMerchant(id) {
+    state.loading = true;
+    el.refresh.disabled = true;
+    setUpdated('loading');
+    Promise.all([
+      S.api('/merchants/' + encodeURIComponent(id)),
+      S.api('/orders?merchant=' + encodeURIComponent(id))
+    ]).then(function (results) {
+      var detail = results[0] || {};
+      var ordersRes = results[1] || {};
+      state.merchant = detail.merchant || detail;
+      state.ledger = detail.ledger || null;
+      state.events = S.eventsOf(detail).slice(0, 20);
+      state.orders = (ordersRes.orders || []).slice().sort(function (a, b) {
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      });
+      state.loading = false;
+      renderAll();
+    }).catch(function (err) {
+      state.loading = false;
+      showError(err);
+    });
+  }
+
+  function showError(err) {
+    S.showApiError(el.apiError, err, function () { loadAll(); });
+    el.body.hidden = true;
+    setUpdated('error');
+    el.refresh.disabled = false;
+    S.toast((err && err.message) || 'Could not load dashboard.', 'err');
+  }
+
+  function loadAll() {
+    showLoading();
+    el.body.hidden = false;
+    el.apiError.hidden = true;
+    Promise.all([S.api('/health'), S.api('/merchants')]).then(function (results) {
+      state.health = results[0] || {};
+      state.merchants = (results[1] && results[1].merchants) || [];
+      S.setEnv(state.health.mode);
+      var wanted = S.qs('merchant');
+      var exists = state.merchants.some(function (m) { return m.id === wanted; });
+      var id = exists ? wanted : (state.merchants[0] && state.merchants[0].id);
+      if (!id) throw new Error('No merchants were seeded by the API.');
+      state.merchantId = id;
+      S.setQuery('merchant', id);
+      S.setMerchantLinks(id);
+      renderSidebar();
+      return loadMerchant(id);
+    }).catch(function (err) {
+      showError(err);
+    });
+  }
+
+  function refresh() {
+    if (state.loading) return;
+    if (state.merchantId) {
+      state.loading = true;
+      el.refresh.disabled = true;
+      setUpdated('refreshing');
+      Promise.all([
+        S.api('/merchants/' + encodeURIComponent(state.merchantId)),
+        S.api('/orders?merchant=' + encodeURIComponent(state.merchantId)),
+        S.api('/merchants')
+      ]).then(function (results) {
+        state.merchant = (results[0] || {}).merchant || results[0];
+        state.ledger = (results[0] || {}).ledger || null;
+        state.events = S.eventsOf(results[0]).slice(0, 20);
+        state.orders = ((results[1] || {}).orders || []).slice().sort(function (a, b) {
+          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+        });
+        state.merchants = (results[2] || {}).merchants || state.merchants;
+        state.loading = false;
+        renderSidebar();
+        renderAll();
+      }).catch(function (err) {
+        state.loading = false;
+        S.toast((err && err.message) || 'Refresh failed.', 'err');
+        el.refresh.disabled = false;
+      });
+    } else {
+      loadAll();
+    }
+  }
+
+  el.refresh.addEventListener('click', refresh);
+
+  el.verify.addEventListener('click', function () {
+    if (!state.merchantId) return;
+    S.setBusy(el.verify, true, 'Verifying…');
+    S.api('/merchants/' + encodeURIComponent(state.merchantId) + '/verify', { method: 'POST' }).then(function (res) {
+      S.setBusy(el.verify, false);
+      renderVerify(res);
+      S.toast(res.valid ? 'Signature valid — the credential is authentic.' : 'Signature check failed.', res.valid ? 'ok' : 'err');
+    }).catch(function (err) {
+      S.setBusy(el.verify, false);
+      S.toast((err && err.message) || 'Verify failed.', 'err');
+    });
+  });
+
+  function renderVerify(res) {
+    var checks = res.checks || {};
+    var ok = !!res.valid;
+    el.verifyResult.className = 'verify-result ' + (ok ? 'ok' : 'bad');
+    var rows = [
+      { k: 'signature', label: 'HMAC signature', v: checks.signature },
+      { k: 'issuer', label: 'Issuer is Settled', v: checks.issuer },
+      { k: 'not_expired', label: 'Credential not expired', v: checks.not_expired }
+    ].map(function (c) {
+      var pass = !!c.v;
+      return '<div class="check-row ' + (pass ? 'ok' : 'bad') + '">' + S.icon(pass ? 'check' : 'x') +
+        '<span>' + S.esc(c.label) + '</span><span class="val">' + (pass ? 'PASS' : 'FAIL') + '</span></div>';
+    }).join('');
+    var cred = res.credential || {};
+    el.verifyResult.innerHTML =
+      '<div class="verify-head">' + S.icon(ok ? 'shieldCheck' : 'alert') + (ok ? 'Credential verified' : 'Credential rejected') +
+        '<span class="badge ' + (ok ? 'emerald' : 'danger') + '">' + (ok ? 'VALID' : 'INVALID') + '</span></div>' +
+      '<div class="checks">' + rows + '</div>' +
+      '<div class="tiny muted" style="margin-top:9px">issued ' + S.esc(S.dateFmt(cred.issued_at)) + ' · expires ' + S.esc(S.dateFmt(cred.expires_at)) + ' · nonce ' + S.esc(cred.nonce || '—') + '</div>';
+  }
+
+  el.ordersBody.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('button[data-action]');
+    if (!btn) return;
+    var action = btn.getAttribute('data-action');
+    var orderId = btn.getAttribute('data-order');
+    var order = state.orders.filter(function (o) { return o.id === orderId; })[0];
+    if (!order) return;
+    if (action === 'deliver') {
+      S.setBusy(btn, true, 'Delivering…');
+      S.fulfill(order).then(function (res) {
+        S.toast('Delivery simulated · order marked ' + ((res.order && res.order.status) || 'delivered') + '.', 'ok');
+        loadMerchant(state.merchantId);
+      }).catch(function (err) {
+        S.setBusy(btn, false);
+        S.toast((err && err.message) || 'Delivery failed.', 'err');
+      });
+    } else if (action === 'claim') {
+      S.claimDialog({
+        merchant: state.merchant,
+        order: order,
+        onComplete: function (res) {
+          S.toast('Refund approved · ' + S.money(res.claim && res.claim.refund) + ' settled instantly.', 'ok');
+          loadMerchant(state.merchantId);
+        }
+      });
+    }
+  });
+
+  el.reset.addEventListener('click', function () {
+    var m = S.modal({
+      title: 'Reset demo data',
+      sub: 'Reseeds merchants, products, orders, reserves and ledger events.',
+      body: '<p class="sub">This clears every order and claim created in this session and restores the seed state. The signing key stays the same for this server process.</p>',
+      foot: '<button class="btn btn-ghost" type="button" data-cancel>Cancel</button><button class="btn btn-primary" type="button" data-confirm>Reset data</button>'
+    });
+    m.foot.querySelector('[data-cancel]').onclick = m.close;
+    var confirm = m.foot.querySelector('[data-confirm]');
+    confirm.addEventListener('click', function () {
+      S.setBusy(confirm, true, 'Resetting…');
+      S.api('/reset', { method: 'POST' }).then(function () {
+        m.close();
+        S.toast('Demo data reset to seed state.', 'ok');
+        loadAll();
+      }).catch(function (err) {
+        S.setBusy(confirm, false);
+        S.toast((err && err.message) || 'Reset failed.', 'err');
+      });
+    });
+  });
+
+  loadAll();
+})();
+</script>
+</body>
+</html>

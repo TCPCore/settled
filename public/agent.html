@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settled — agent trust console</title>
+<meta name="description" content="One signed API call returns a merchant's tier, score, protection cap and fee before an AI agent spends money.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="agent">
+<div class="bg" aria-hidden="true"></div>
+
+<header class="topnav">
+  <div class="topnav-in">
+    <a class="brand" href="index.html" aria-label="Settled home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.4 20.4 7v10L12 21.6 3.6 17V7L12 2.4Z" fill="#2BD9A0" fill-opacity=".16" stroke="#2BD9A0" stroke-width="1.3"/><path d="m8.3 12.2 2.4 2.4 5-5.2" stroke="#2BD9A0" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="brand-copy"><b>Settled</b><small>trust settlement</small></span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html" data-nav="dashboard">Dashboard</a>
+      <a href="store.html" data-nav="store">Storefront</a>
+      <a href="agent.html" data-nav="agent">Agent console</a>
+      <a href="demo.html" data-nav="demo">Demo</a>
+    </nav>
+    <div class="nav-side">
+      <span class="env-pill" id="envPill"><span class="dot"></span><span id="envLabel">SIM</span></span>
+      <span class="nav-merchant" id="navMerchant" hidden><span id="navMerchantName">—</span><i class="tier tier-c" id="navMerchantTier">?</i></span>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <div id="apiError" class="panel api-error" hidden></div>
+
+  <div id="agentBody">
+    <div class="agent-hero">
+      <div>
+        <div class="eyebrow">Agent trust console</div>
+        <h1 class="page-title">Verify before you spend.</h1>
+        <p class="page-sub">This is the API an AI shopping agent would call before spending money — one signed request returns tier, score, protection cap, fee and the credential to verify later.</p>
+      </div>
+      <div class="agent-facts">
+        <div class="agent-fact"><div class="af-label">Issuer</div><div class="af-value">Settled</div></div>
+        <div class="agent-fact"><div class="af-label">Algorithm</div><div class="af-value">HS256</div></div>
+        <div class="agent-fact"><div class="af-label">Mode</div><div class="af-value" id="agentMode">SIM</div></div>
+      </div>
+    </div>
+
+    <div class="agent-grid">
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <section class="panel">
+          <div class="panel-head">
+            <div style="min-width:0">
+              <div class="panel-title">trust.verify <span class="badge">POST /api/trust/verify</span></div>
+              <div class="panel-sub">Check the signed ledger against a minimum tier before checkout.</div>
+            </div>
+          </div>
+          <div class="control-stack">
+            <div class="control-row">
+              <div class="field">
+                <label class="field-label" for="merchantSelect">Merchant</label>
+                <select class="select" id="merchantSelect"></select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="minTier">Minimum tier</label>
+                <select class="select" id="minTier">
+                  <option value="A">A — excellent only</option>
+                  <option value="B">B — solid or better</option>
+                  <option value="C" selected>C — watch or better</option>
+                  <option value="D">D — anything</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-block" id="verifyBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v6c0 4.6 3 7.6 7 9 4-1.4 7-4.4 7-9V6l-7-3Z"/><polyline points="9 12 11.2 14.2 15.4 10"/></svg>
+              Run trust.verify
+            </button>
+            <button class="btn btn-gold btn-block" id="buyBtn" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M16 13h2"/></svg>
+              <span id="buyLabel">Buy as agent</span>
+            </button>
+            <p class="tiny muted">Buys the merchant’s first product as <span class="mono">agent_shopper_01</span>. Buyer pays $0.00 in protection fees.</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head compact">
+            <div class="panel-title">Call log</div>
+            <div class="head-actions">
+              <span class="badge" id="callCount">0</span>
+              <button class="btn btn-ghost btn-sm" id="clearLogBtn" type="button">Clear</button>
+            </div>
+          </div>
+          <div class="call-log" id="callLog" aria-live="polite">
+            <div class="empty" style="padding:22px 10px"><strong>No calls yet</strong>Run a verification to see the agent’s API traffic.</div>
+          </div>
+        </section>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <section class="panel">
+          <div class="panel-head">
+            <div style="min-width:0">
+              <div class="panel-title">Trust decision</div>
+              <div class="panel-sub" id="summarySub">Run trust.verify to get a signed decision.</div>
+            </div>
+            <span class="badge" id="verifiedBadge">idle</span>
+          </div>
+          <div id="verifySummary"></div>
+          <div class="json-wrap">
+            <pre class="json json-tall" id="verifyJson">// POST /api/trust/verify
+// { "merchant_id": "m1", "min_tier": "C" }</pre>
+          </div>
+          <div class="panel-foot">
+            <span class="mono" id="verifiedAt">—</span>
+            <button class="btn btn-ghost btn-sm" id="copyVerifyBtn" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              Copy response
+            </button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Agent purchase</div>
+            <span class="badge" id="purchaseBadge">none</span>
+          </div>
+          <div class="agent-result" id="purchaseResult">
+            <p class="tiny muted">A verified merchant can be purchased from without a browser. The order and the trust credential are written to the same ledger.</p>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span><b>Settled</b> · trust settlement prototype · simulated payments</span>
+      <span class="foot-links"><a href="index.html">Merchant dashboard</a><a href="store.html">Storefront</a><a href="agent.html">Agent console</a></span>
+    </footer>
+  </div>
+</main>
+
+<div class="toast-host" id="toastHost" aria-live="polite"></div>
+<noscript><div class="panel" style="margin:20px;padding:18px">Settled needs JavaScript enabled.</div></noscript>
+
+<script src="app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var S = window.Settled;
+  var state = {
+    health: null,
+    merchants: [],
+    merchantId: null,
+    minTier: 'C',
+    verified: false,
+    decision: null,
+    calls: [],
+    purchase: null
+  };
+
+  var el = {
+    apiError: document.getElementById('apiError'),
+    body: document.getElementById('agentBody'),
+    merchantSelect: document.getElementById('merchantSelect'),
+    minTier: document.getElementById('minTier'),
+    verifyBtn: document.getElementById('verifyBtn'),
+    buyBtn: document.getElementById('buyBtn'),
+    buyLabel: document.getElementById('buyLabel'),
+    callLog: document.getElementById('callLog'),
+    callCount: document.getElementById('callCount'),
+    clearLog: document.getElementById('clearLogBtn'),
+    summarySub: document.getElementById('summarySub'),
+    verifiedBadge: document.getElementById('verifiedBadge'),
+    verifySummary: document.getElementById('verifySummary'),
+    verifyJson: document.getElementById('verifyJson'),
+    verifiedAt: document.getElementById('verifiedAt'),
+    copyVerify: document.getElementById('copyVerifyBtn'),
+    purchaseBadge: document.getElementById('purchaseBadge'),
+    purchaseResult: document.getElementById('purchaseResult'),
+    agentMode: document.getElementById('agentMode')
+  };
+
+  S.mountNav('agent');
+
+  function merchant() {
+    return state.merchants.filter(function (m) { return m.id === state.merchantId; })[0] || null;
+  }
+  function initials(name) {
+    var p = String(name || '').trim().split(/\s+/);
+    return ((p[0] || '')[0] || '') + ((p[1] || '')[0] || '');
+  }
+  function tierBadge(tier) {
+    var t = S.tierInfo(tier);
+    return '<span class="tier ' + t.cls + '">' + S.esc(tier || '?') + '</span>';
+  }
+
+  function logCall(call) {
+    state.calls.unshift({
+      method: call.method,
+      path: call.path,
+      status: call.status,
+      ok: call.ok,
+      ms: call.ms,
+      at: new Date()
+    });
+    if (state.calls.length > 30) state.calls.pop();
+    renderCalls();
+  }
+  S.api.onCall = logCall;
+
+  function renderCalls() {
+    el.callCount.textContent = String(state.calls.length);
+    if (!state.calls.length) {
+      el.callLog.innerHTML = '<div class="empty" style="padding:22px 10px"><strong>No calls yet</strong>Run a verification to see the agent’s API traffic.</div>';
+      return;
+    }
+    el.callLog.innerHTML = state.calls.map(function (c) {
+      var method = String(c.method || 'GET').toUpperCase();
+      var statusCls = c.ok ? 'emerald' : 'danger';
+      var statusText = c.status ? String(c.status) : 'ERR';
+      return '<div class="call">' +
+        '<span class="method ' + (method === 'GET' ? 'get' : '') + '">' + S.esc(method) + '</span>' +
+        '<span class="path" title="' + S.esc(c.path) + '">' + S.esc(c.path) + '</span>' +
+        '<span class="badge ' + statusCls + '" style="font-size:8px;padding:1px 5px">' + S.esc(statusText) + '</span>' +
+        '<span class="ms">' + (c.ok ? S.esc(c.ms) + ' ms' : 'failed') + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function resetDecision(silent) {
+    state.verified = false;
+    state.decision = null;
+    el.verifiedBadge.className = 'badge';
+    el.verifiedBadge.textContent = 'idle';
+    el.summarySub.textContent = silent ? 'Settings changed — run trust.verify again.' : 'Run trust.verify to get a signed decision.';
+    el.verifySummary.innerHTML = '';
+    el.verifyJson.textContent = '// POST /api/trust/verify\n// { "merchant_id": "' + (state.merchantId || 'm1') + '", "min_tier": "' + state.minTier + '" }';
+    el.verifiedAt.textContent = '—';
+    el.copyVerify.disabled = true;
+    el.buyBtn.disabled = true;
+    el.buyLabel.textContent = 'Buy as agent';
+    el.purchaseBadge.className = 'badge';
+    el.purchaseBadge.textContent = 'none';
+    state.purchase = null;
+    el.purchaseResult.innerHTML = '<p class="tiny muted">A verified merchant can be purchased from without a browser. The order and the trust credential are written to the same ledger.</p>';
+  }
+
+  function renderSummary(res) {
+    var ok = !!res.verified;
+    var reasons = Array.isArray(res.reasons) ? res.reasons : [];
+    el.verifiedBadge.className = 'badge ' + (ok ? 'emerald' : 'danger');
+    el.verifiedBadge.textContent = ok ? 'VERIFIED' : 'NOT VERIFIED';
+    el.summarySub.textContent = ok
+      ? 'Signed decision approved for this merchant.'
+      : 'The merchant does not meet the requested trust threshold.';
+    var reasonsHtml = reasons.length
+      ? '<div class="reasons">' + reasons.map(function (r) {
+          return '<div class="reason">' + S.icon('alert') + '<span>' + S.esc(humanReason(r)) + '</span></div>';
+        }).join('') + '</div>'
+      : '';
+    el.verifySummary.innerHTML =
+      '<div class="verify-summary ' + (ok ? 'ok' : 'bad') + '">' +
+        '<div class="vs-top">' +
+          '<span class="vs-title">' + (ok ? 'Verified for checkout' : 'Verification failed') + '</span>' +
+          '<span class="badge vs-badge ' + (ok ? 'emerald' : 'danger') + '">' + (ok ? 'PASS' : 'FAIL') + '</span>' +
+        '</div>' +
+        '<div class="vs-grid">' +
+          '<div class="vs-cell"><div class="vs-label">Tier</div><div class="vs-value">' + S.esc(res.tier || '—') + '</div></div>' +
+          '<div class="vs-cell"><div class="vs-label">Score</div><div class="vs-value">' + S.esc(res.score !== undefined ? res.score : '—') + '</div></div>' +
+          '<div class="vs-cell"><div class="vs-label">Protection cap</div><div class="vs-value">' + S.esc(S.money(res.cap)) + '</div></div>' +
+          '<div class="vs-cell"><div class="vs-label">Fee</div><div class="vs-value">' + S.esc(res.fee_bps !== undefined ? res.fee_bps : '—') + ' bps</div></div>' +
+        '</div>' +
+        reasonsHtml +
+      '</div>';
+  }
+
+  function humanReason(r) {
+    var s = String(r || '');
+    var m = s.match(/^tier_below_minimum:([A-D])<([A-D])$/);
+    if (m) return 'Tier ' + m[1] + ' is below the required minimum tier ' + m[2] + '.';
+    if (/signature/.test(s)) return 'The credential signature did not verify.';
+    if (/issuer/.test(s)) return 'The credential was not issued by Settled.';
+    if (/expir/.test(s)) return 'The credential has expired.';
+    if (/not_found/.test(s)) return 'The merchant could not be found.';
+    return s.replace(/[_]/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); });
+  }
+
+  function verify() {
+    if (!state.merchantId) return;
+    S.setBusy(el.verifyBtn, true, 'Verifying…');
+    el.summarySub.textContent = 'Calling the signed trust API…';
+    S.api('/trust/verify', { method: 'POST', body: { merchant_id: state.merchantId, min_tier: state.minTier } }).then(function (res) {
+      S.setBusy(el.verifyBtn, false);
+      state.decision = res;
+      state.verified = !!res.verified;
+      el.verifyJson.innerHTML = S.syntax(res);
+      el.verifiedAt.textContent = 'checked ' + S.dateFmt(res.checked_at) + ' · ' + (res.merchant_id || '');
+      el.copyVerify.disabled = false;
+      el.copyVerify.onclick = function () { S.copyText(JSON.stringify(res, null, 2), 'trust.verify response'); };
+      renderSummary(res);
+      el.buyBtn.disabled = !state.verified;
+      el.buyLabel.textContent = state.verified ? 'Buy as agent' : 'Buy as agent · not verified';
+      S.toast(res.verified ? 'Verified · ' + (res.tier || '') + ' tier, cap ' + S.money(res.cap) : 'Not verified · ' + humanReason((res.reasons || [])[0] || 'below threshold'), res.verified ? 'ok' : 'warn');
+    }).catch(function (err) {
+      S.setBusy(el.verifyBtn, false);
+      state.verified = false;
+      el.buyBtn.disabled = true;
+      el.summarySub.textContent = 'Verification call failed.';
+      el.verifiedBadge.className = 'badge danger';
+      el.verifiedBadge.textContent = 'ERROR';
+      el.verifySummary.innerHTML = '<div class="verify-summary bad"><div class="vs-top"><span class="vs-title">' + S.esc((err && err.message) || 'Request failed') + '</span><span class="badge vs-badge danger">ERROR</span></div></div>';
+      S.toast((err && err.message) || 'trust.verify failed.', 'err');
+    });
+  }
+
+  function buy() {
+    if (!state.verified || !state.merchantId) {
+      S.toast('Run trust.verify and pass first — agents don’t spend money on unverified merchants.', 'warn');
+      return;
+    }
+    var m = merchant();
+    var products = m && m.products ? m.products : [];
+    var product = products[0];
+    if (!product) {
+      S.setBusy(el.buyBtn, true, 'Loading inventory…');
+      S.api('/merchants/' + encodeURIComponent(state.merchantId)).then(function (detail) {
+        var full = detail.merchant || detail;
+        products = S.productsOf(full);
+        product = products[0];
+        S.setBusy(el.buyBtn, false);
+        if (!product) { S.toast('This merchant has no products to buy.', 'warn'); return; }
+        doBuy(product);
+      }).catch(function (err) {
+        S.setBusy(el.buyBtn, false);
+        S.toast((err && err.message) || 'Could not load inventory.', 'err');
+      });
+      return;
+    }
+    doBuy(product);
+  }
+
+  function doBuy(product) {
+    S.setBusy(el.buyBtn, true, 'Purchasing as agent…');
+    S.api('/merchants/' + encodeURIComponent(state.merchantId) + '/orders', {
+      method: 'POST',
+      body: {
+        product_id: product.id,
+        buyer: { name: 'Agent Shopper 01', email: 'agent_shopper_01@agents.settled' }
+      }
+    }).then(function (res) {
+      S.setBusy(el.buyBtn, false);
+      state.purchase = res;
+      renderPurchase(res, product);
+      S.toast('Agent purchase complete · ' + S.money(res.order && res.order.amount) + ' protected.', 'ok');
+    }).catch(function (err) {
+      S.setBusy(el.buyBtn, false);
+      S.toast((err && err.message) || 'Agent purchase failed.', 'err');
+      el.purchaseBadge.className = 'badge danger';
+      el.purchaseBadge.textContent = 'failed';
+      el.purchaseResult.innerHTML = '<div class="purchase-card" style="border-color:var(--danger-line);background:var(--danger-dim)"><div class="purchase-head">' + S.icon('alert') + 'Purchase rejected</div><p class="purchase-note">' + S.esc((err && err.message) || 'The order was rejected.') + '</p></div>';
+    });
+  }
+
+  function renderPurchase(res, product) {
+    var order = res.order || {};
+    var receipt = res.receipt || {};
+    var payment = res.payment || {};
+    var m = merchant();
+    el.purchaseBadge.className = 'badge emerald';
+    el.purchaseBadge.textContent = 'protected';
+    el.purchaseResult.innerHTML =
+      '<div class="purchase-card">' +
+        '<div class="purchase-head">' + S.icon('shieldCheck') + 'Agent purchase complete <span class="badge emerald" style="margin-left:auto">' + S.esc(order.status || 'paid') + '</span></div>' +
+        '<div class="purchase-grid">' +
+          '<div class="pc-cell"><div class="pc-label">Order</div><div class="pc-value">' + S.esc(receipt.order_id || order.id || '—') + '</div></div>' +
+          '<div class="pc-cell"><div class="pc-label">Paid</div><div class="pc-value money">' + S.esc(S.money(receipt.paid !== undefined ? receipt.paid : order.amount)) + '</div></div>' +
+          '<div class="pc-cell"><div class="pc-label">Payment</div><div class="pc-value">' + S.esc((payment && payment.id) || order.payment_id || '—') + '</div></div>' +
+          '<div class="pc-cell"><div class="pc-label">Agent</div><div class="pc-value">agent_shopper_01</div></div>' +
+          '<div class="pc-cell" style="grid-column:1/-1"><div class="pc-label">Credential hash on receipt</div><div class="pc-value">' + S.esc(receipt.credential_hash || '—') + '</div></div>' +
+        '</div>' +
+        '<p class="purchase-note">' + S.esc(product ? product.name : (order.product_name || 'Product')) + ' · ' + S.esc(m ? m.name : '') + ' · protection up to ' + S.esc(S.money((order.protection && order.protection.cap) || (m && m.cap))) + '. No browser was involved in this purchase.</p>' +
+        '<div class="order-actions-row"><a class="btn btn-ghost btn-sm" data-link="index.html" href="index.html">' + S.icon('book') + 'View merchant ledger</a></div>' +
+      '</div>';
+    S.setMerchantLinks(state.merchantId);
+  }
+
+  function renderSelects() {
+    el.merchantSelect.innerHTML = state.merchants.map(function (m) {
+      return '<option value="' + S.esc(m.id) + '"' + (m.id === state.merchantId ? ' selected' : '') + '>' + S.esc(m.name) + ' · ' + S.esc(m.tier || '?') + ' tier</option>';
+    }).join('');
+    el.minTier.value = state.minTier;
+  }
+
+  el.verifyBtn.addEventListener('click', verify);
+  el.buyBtn.addEventListener('click', buy);
+  el.clearLog.addEventListener('click', function () {
+    state.calls = [];
+    renderCalls();
+    S.toast('Call log cleared.', 'info');
+  });
+  el.merchantSelect.addEventListener('change', function () {
+    var id = el.merchantSelect.value;
+    if (!id || id === state.merchantId) return;
+    state.merchantId = id;
+    S.setQuery('merchant', id);
+    S.setMerchantLinks(id);
+    var m = merchant();
+    S.setNavMerchant(m);
+    renderSelects();
+    resetDecision(true);
+    S.toast('Merchant switched · re-run verification.', 'info');
+  });
+  el.minTier.addEventListener('change', function () {
+    state.minTier = el.minTier.value;
+    if (state.decision) resetDecision(true);
+    S.toast('Threshold changed · re-run verification.', 'info');
+  });
+
+  function showError(err) {
+    S.showApiError(el.apiError, err, function () { loadAll(); });
+    el.body.hidden = true;
+    S.toast((err && err.message) || 'Could not load agent console.', 'err');
+  }
+
+  function loadAll() {
+    el.body.hidden = false;
+    el.apiError.hidden = true;
+    Promise.all([S.api('/health'), S.api('/merchants')]).then(function (results) {
+      state.health = results[0] || {};
+      state.merchants = (results[1] && results[1].merchants) || [];
+      S.setEnv(state.health.mode);
+      el.agentMode.textContent = String((state.health.mode || 'sim')).toUpperCase() === 'PAYPAL' ? 'PAYPAL' : 'SIM';
+      var wanted = S.qs('merchant');
+      var exists = state.merchants.some(function (m) { return m.id === wanted; });
+      var id = exists ? wanted : (state.merchants[0] && state.merchants[0].id);
+      if (!id) throw new Error('No merchants were seeded by the API.');
+      state.merchantId = id;
+      state.minTier = el.minTier.value || 'C';
+      S.setQuery('merchant', id);
+      S.setMerchantLinks(id);
+      renderSelects();
+      S.setNavMerchant(merchant());
+      resetDecision(false);
+      return true;
+    }).catch(function (err) {
+      showError(err);
+    });
+  }
+
+  loadAll();
+})();
+</script>
+</body>
+</html>

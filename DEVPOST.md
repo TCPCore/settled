@@ -1,0 +1,118 @@
+# Settled
+
+**Reputation settles with the payment.**
+
+A PayPal-native assurance layer for commerce and AI agents: a signed, portable merchant trust credential, protection priced per order against a hard cap, and a claim paid from the merchant's reserve in about a second — with an AI buyer agent negotiating inside a signed mandate.
+
+> **Links (fill before submitting)**
+> - Repo: `REPO_URL_HERE` (MIT — see [LICENSE](LICENSE))
+> - Demo video (<3 min, YouTube): `VIDEO_URL_HERE`
+> - Run it locally: `node server.js` → `http://127.0.0.1:4173/demo.html`
+> - Long-form write-up: [WRITEUP.md](WRITEUP.md) · judge brief: [JUDGE-BRIEF.md](JUDGE-BRIEF.md)
+
+---
+
+## Where it came from
+
+Two things are happening at once.
+
+**Buyers don't trust the checkout.** 51% of shoppers abandon because they doubt the business is legitimate — the #1 reason, ahead of card security (TrustedSite, 2026). 96% are concerned about unfamiliar stores; 94% fear AI-generated fake businesses; 91% fear AI-written fake reviews.
+
+**AI agents can pay, but not trust or be trusted.** Agent checkout is arriving on PayPal's rails (Agent Ready, Store Sync, WebMCP; AP2/ACP/UCP mandates), yet an agent has no portable way to check a merchant, and a buyer has no instant remedy when an agent-originated order goes wrong.
+
+And the cost is already inside PayPal: its FY2025 10-K shows a **$1.34B protection provision / $1.49B realized losses** — a bundled cost centre with no risk-based price and no portable trust signal.
+
+Settled closes that loop: **outcome → signed credential → risk-priced protection → reserve → instant payout → updated outcome.** One object — the Agent Commerce Contract — carries identity, negotiated terms, price and recourse, and it rides the PayPal SDK.
+
+## What it does
+
+Settled turns an order into a signed, insured deal with five parts:
+
+1. **Merchant Trust Credential** — an HMAC-SHA256-signed, portable record built from settled payments, delivery and dispute outcomes. Northwind Audio: tier A, score 91, 94% coverage, $5,000 cap, $12,500 reserve. Verify it with one call: `POST /api/trust/verify`.
+2. **Agent Passport** — operator KYB, capabilities, a signed spend mandate (spend limit, expiry, merchant allowlist) and reputation. An unverified agent (RogueBot) is rejected *before* an order exists.
+3. **AI negotiation inside a signed mandate** — a buyer agent and the merchant's policy haggle over price. The model proposes moves and wording; the server only lets it choose among pre-computed legal prices, so the AI can talk but cannot exceed the buyer's mandate. Terms are fixed before payment.
+4. **Risk-priced protection** — tier A 35 bps / B 90 / C 150 / D decline; caps $5k/$2.5k/$1k; settlement mode instant capture / capture + reserve / escrow. A $237.00 order costs $0.83 to protect, merchant-paid, buyer free.
+5. **Instant recourse** — the buyer (or agent) files a claim with evidence; an AI explainer recommends approve/review/deny and shows its reasoning, then the rule engine pays from the merchant's reserve through the PayPal refund rail. **$237.00 refunded in ~1.2s**, reserve drops to $12,263.00, the merchant's score and tier recompute.
+
+Try the 5-step console at `/demo.html`. It runs end to end with one click and ends with **ALL FIVE AXES 8+**.
+
+## How we built it
+
+**Zero dependencies, Node ≥20, no build step.** `node server.js` serves the static pages and the JSON API from the standard library only (global `fetch`, `crypto`, `http`). No npm packages, so judges can run it offline.
+
+**PayPal (sandbox).**
+- Orders v2: `POST /v2/checkout/orders` (`intent=CAPTURE`), return the approval URL, `POST /v2/checkout/orders/{id}/capture`, extract the capture id, then finalize the order at the agreed contract price.
+- Payments v2: `POST /v2/payments/captures/{id}/refund` on a claim, so the badge, the order and the refund are one flow rather than three integrations.
+- OAuth2 client-credentials token cache; clean `502 PAYMENT_PROVIDER_ERROR` without corrupting state when a live call fails.
+- Every ID is real when the live rail is on; `SIM-…` IDs otherwise (default).
+
+**AI (core, not decoration).**
+- OpenAI-compatible `/chat/completions` with JSON mode, `temperature 0.2`, timeout 8s.
+- The buyer agent never invents a price: the server computes the legal candidate set (86% of list, the floor/auto-accept midpoint, the auto-accept price), the model picks one and writes the message/rationale, and the contract policy validates before committing.
+- Two AI surfaces: the negotiation transcript (labelled `AI` / `FALLBACK` in the demo) and the claim explainer that reviews evidence and drafts the rationale — with the rule engine keeping the final decision.
+- Deterministic fallback when no key/API error (`ai.used: false`), so the demo never dies on stage and judges can run it with no secrets.
+
+**Trust and settlement engine.**
+- HMAC-SHA256 merchant credential + SHA-256 hash-chained event log (tamper-evident, verifiable from the dashboard and the agent API).
+- Risk engine derives score → tier → fee bps → cap → payment mode from outcome metrics, not hardcoded values.
+- Reserve accounting pays claims from the merchant's reserve (shortfall drawn from a pool), and claim outcomes feed back into the merchant's score.
+
+## What is real vs. simulated
+
+We would rather say this first.
+
+**Real:** the API, risk engine, signed credential, hash chain, agent passport and mandate checks, negotiation policy, protection pricing, reserve accounting, claims, PayPal Orders v2 create/capture and Payments v2 refund code paths, and the e2e suite (`npm test`).
+
+**Live when sandbox credentials are set:** real PayPal **sandbox** order, approval, capture and refund IDs — the manual demo step renders real PayPal Buttons; the video states which take it is (sandbox or labelled SIM).
+
+**Simulated by default for judges:** with no keys the app runs in SIM mode — `SIM-…` payment/refund IDs, no money moves. Fulfillment ("simulate delivery"), KYB, and the $25,000 network pool are demo fixtures, not production systems. **The reserve is demo capital**, not a balance sheet: production is an insurer/LC-backed reserve with per-merchant caps and a backtested loss curve.
+
+**Not claimed:** the live insurance/underwriting product, regulatory sign-off, or traction. Settled is pre-revenue; the 30-day plan is pre-registered tests (12 merchant interviews, 3/12 LOIs at ≥25 bps, a holdout conversion test, a 20-claim concierge pilot, one insurer term sheet).
+
+## Challenges
+
+- **Making the AI real without letting it move money.** The model can write the negotiation, but the numbers must be provable. We solved it by inverting control: server computes the legal prices, the model selects and explains, the policy enforces, and a deterministic path guarantees the same accepted price every time.
+- **Living on the edge of "already exists."** Trust scores, guarantees, badges and buyer protection all exist. Our prior-art audit is honest about it: the novelty is the closed loop and the settlement seat, not the vocabulary. That discipline shaped the demo (we show the refund and the recompute, not a badge).
+- **The locked-in sandbox demo.** A live PayPal approval redirect is one flaky Wi-Fi away from a dead stage. We built a SIM/SANDBOX switch: the recorded take shows real sandbox IDs; the fallback runs the identical flow offline.
+- **Pricing a guarantee without a balance sheet.** Instant payouts need capital. We kept the demo on a merchant-reserve abstraction with explicit caps, and wrote down the partner path (insurer/LC) instead of pretending it exists.
+- **Zero dependencies, no framework.** Every route, signature and hash-chain step is hand-rolled on Node built-ins — more code to get right, but nothing to install and nothing to break on the judge's machine.
+
+## Accomplishments
+
+- A complete 5-step demo that runs in one click, with a live JSON request/response log and a scorecard that maps each step to the problem it fixes.
+- AI negotiation that is genuinely constrained: same accepted price on the deterministic path, model-generated transcript when a key is present, no scenario where the model can exceed the mandate.
+- Real PayPal sandbox money path in the same app as the SIM fallback, with clean failures.
+- A working refund in ~1.2s that updates reserve, score and tier in the same screen — the moment the pitch turns on.
+- The full e2e suite passing locally with zero external dependencies: **63/63 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
+
+## What we learned
+
+- **The hard part of agentic commerce isn't paying — it's the answer to "who pays if it fails?"** Stripe/AP2/Agent Ready all solve authorization; almost nobody solves recourse.
+- **AI is most valuable where it's bounded.** An LLM that argues inside a server-enforced price set is demoable, auditable and safe; an LLM that *decides the price* is a liability.
+- **The risk price is the product.** Once protection has a per-order price derived from outcomes, trust stops being a marketing cost and becomes a SKU.
+- **Honesty is a feature in a hackathon.** Saying "SIM by default, sandbox in the video, demo pool not capital" before judges ask makes the rest credible.
+
+## What's next
+
+1. **30-day validation:** 12 merchant interviews; 3/12 LOIs at ≥25 bps; holdout conversion test (≥5% relative lift on unfamiliar buyers); 20-claim concierge pilot with an insurer/LC partner.
+2. **Agent rails:** wire the passport/mandate to PayPal's agentic surfaces (Agent Ready / Agent Toolkit MCP) and publish the credential as a verifiable-credential format (W3C VC) instead of HMAC.
+3. **Production money path:** insurer/LC-backed reserve, per-merchant aggregate caps, backtested loss curves; exchange SIM for sandbox in CI.
+4. **Distribution:** ship as a platform/PSP trust API first (one integration, many merchants) — the merchant app is the wedge, not the end state.
+
+## Built with
+
+`PayPal Orders v2` · `PayPal Payments v2 (refunds)` · `PayPal Sandbox` · `PayPal Agent Ready / AP2` (mandate model, roadmap wiring) · `Node.js 20` (zero dependencies; `http`, `crypto`, `fetch`) · `OpenAI-compatible LLM` (JSON mode, configurable model/base URL) · `HMAC-SHA256` · `SHA-256 hash chain` · `vanilla HTML/CSS/JS` (no build step, no external assets)
+
+## Try it (60 seconds)
+
+```bash
+cd settled
+node server.js                    # http://127.0.0.1:4173
+open http://127.0.0.1:4173/demo.html
+```
+
+Click **Reset**, then **Run full demo**. With no `.env`, everything is SIM and deterministic. Add sandbox credentials (see [.env.example](.env.example)) to show real PayPal orders, captures and refunds; add an AI key to see the model-generated negotiation transcript. The manual step renders real **PayPal Buttons** (live rail); **Run full demo** stays on SIM so it never blocks on a popup.
+
+## License
+
+MIT — [LICENSE](LICENSE). "Settled" is a hackathon prototype; nothing here is financial, insurance or legal advice.

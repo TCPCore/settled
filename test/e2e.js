@@ -1,0 +1,1436 @@
+#!/usr/bin/env node
+/**
+ * Settled — end-to-end API test.
+ *
+ * Zero dependencies. Spawns `node server.js` on port 4173 (or reuses a server
+ * already answering /api/health), runs the acceptance suite from BUILD-SPEC §8
+ * plus the fault / tamper / shortfall / static / recompute checks, prints
+ * PASS/FAIL per test and exits 1 on any failure.
+ *
+ * Usage:
+ *   node test/e2e.js                 # spawn on 4173 (default)
+ *   PORT=4400 node test/e2e.js       # spawn on another port
+ *   BASE_URL=http://127.0.0.1:4173 node test/e2e.js   # reuse a running server
+ *
+ * The suite mutates in-memory state and always POSTs /api/reset at the start
+ * and at the end, so a reused server is left in seed state.
+ */
+'use strict';
+
+const { spawn } = require('node:child_process');
+const path = require('node:path');
+const fs = require('node:fs');
+
+const PORT = Number(process.env.PORT || 4173);
+const BASE = process.env.BASE_URL || `http://127.0.0.1:${PORT}`;
+const ROOT = path.resolve(__dirname, '..');
+const HTTP_TIMEOUT = 15000;
+const BOOT_TIMEOUT = 20000;
+
+// ---------------------------------------------------------------------------
+// Contract constants (BUILD-SPEC §2, §3)
+// ---------------------------------------------------------------------------
+
+const SEED = {
+  m1: { name: 'Northwind Audio', domain: 'northwind.audio', tier: 'A', score: 91, fee_bps: 35, cap: 5000, reserve: 12500, mode: 'instant', orders: 4812, delivered_pct: 99.1, as_described_pct: 99.4, disputes: 14, chargebacks: 2 },
+  m2: { name: 'Lumen Supply', domain: 'lumensupply.co', tier: 'B', score: 76, fee_bps: 90, cap: 2500, reserve: 4000, mode: 'reserve', orders: 412, delivered_pct: 97.2, as_described_pct: 98.1, disputes: 6, chargebacks: 1 },
+  m3: { name: 'Nova Finds', domain: 'novafinds.shop', tier: 'C', score: 54, fee_bps: 150, cap: 1000, reserve: 900, mode: 'escrow', orders: 12, delivered_pct: 91.7, as_described_pct: 93.0, disputes: 1, chargebacks: 0 },
+};
+
+const PRODUCTS = {
+  p1: { merchant: 'm1', name: 'Aurora One headphones', price: 249.0 },
+  p2: { merchant: 'm1', name: 'Aurora Buds', price: 129.0 },
+  p3: { merchant: 'm2', name: 'Halo floor lamp', price: 189.0 },
+  p4: { merchant: 'm2', name: 'Halo desk lamp', price: 79.0 },
+  p5: { merchant: 'm3', name: 'Pocket projector', price: 159.0 },
+};
+
+const TIER = {
+  A: { fee_bps: 35, cap: 5000, mode: 'instant' },
+  B: { fee_bps: 90, cap: 2500, mode: 'reserve' },
+  C: { fee_bps: 150, cap: 1000, mode: 'escrow' },
+  D: { fee_bps: 0, cap: 0, mode: 'blocked' },
+};
+
+// ---------------------------------------------------------------------------
+// Tiny assertion + reporting harness
+// ---------------------------------------------------------------------------
+
+const results = [];
+const skipped = [];
+let lastRequest = null;
+
+// Optional subset run (triage / iterating on one section):
+//   ONLY_TESTS=T4,T5 node test/e2e.js    # id prefix match, e.g. all v2 tests
+const ONLY_TESTS = (process.env.ONLY_TESTS || '')
+  .split(',')
+  .map((t) => t.trim())
+  .filter(Boolean);
+
+function print(line) {
+  process.stdout.write(`${line}\n`);
+}
+
+function fail(msg, evidence) {
+  throw Object.assign(new Error(msg), { evidence });
+}
+
+function assert(cond, msg, evidence) {
+  if (!cond) fail(msg, evidence);
+}
+
+function eq(actual, expected, label) {
+  if (actual !== expected) fail(`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+}
+
+function near(actual, expected, label, tol = 0.005) {
+  const n = num(actual);
+  if (n === null || Math.abs(n - expected) > tol) {
+    fail(`${label}: expected ${expected} (±${tol}), got ${JSON.stringify(actual)}`);
+  }
+}
+
+function num(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v.replace(/[$,\s]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function isObj(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function hasKeys(obj, keys, label) {
+  assert(isObj(obj), `${label}: expected an object, got ${JSON.stringify(obj)}`);
+  const missing = keys.filter((k) => !(k in obj));
+  assert(missing.length === 0, `${label}: missing key(s) ${missing.join(', ')} — present: ${Object.keys(obj).join(', ')}`);
+}
+
+function isIso(v) {
+  return typeof v === 'string' && !Number.isNaN(Date.parse(v));
+}
+
+async function test(id, name, fn) {
+  if (ONLY_TESTS.length && !ONLY_TESTS.some((p) => id === p || id.startsWith(p))) {
+    skipped.push(id);
+    print(`SKIP  ${id.padEnd(4)} ${name}`);
+    return;
+  }
+  try {
+    const detail = await fn();
+    results.push({ id, name, ok: true });
+    print(`PASS  ${id.padEnd(4)} ${name}${detail ? `  — ${detail}` : ''}`);
+  } catch (err) {
+    results.push({ id, name, ok: false, err });
+    print(`FAIL  ${id.padEnd(4)} ${name}  — ${err.message}`);
+    if (err.evidence !== undefined) {
+      print(`      evidence: ${JSON.stringify(err.evidence).slice(0, 1200)}`);
+    } else if (lastRequest) {
+      print(`      last response: ${lastRequest}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// HTTP
+// ---------------------------------------------------------------------------
+
+async function http(method, p, opts = {}) {
+  const url = BASE + p;
+  const init = {
+    method,
+    headers: { ...(opts.headers || {}) },
+    signal: AbortSignal.timeout(opts.timeout || HTTP_TIMEOUT),
+    redirect: 'manual',
+  };
+  if (opts.body !== undefined) {
+    if (typeof opts.body === 'string') {
+      init.body = opts.body;
+      init.headers['content-type'] = init.headers['content-type'] || 'application/json';
+    } else {
+      init.body = JSON.stringify(opts.body);
+      init.headers['content-type'] = 'application/json';
+    }
+  }
+  let res;
+  try {
+    res = await fetch(url, init);
+  } catch (e) {
+    throw Object.assign(new Error(`${method} ${p} failed: ${e.message}`), {
+      evidence: { hint: 'network/transport error — is the server up?', base: BASE },
+    });
+  }
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = undefined;
+  }
+  const ct = res.headers.get('content-type') || '';
+  lastRequest = `${method} ${p} -> ${res.status} ${ct} ${text.slice(0, 500)}`;
+  return { status: res.status, headers: Object.fromEntries(res.headers.entries()), contentType: ct, text, json, method, path: p };
+}
+
+const get = (p) => http('GET', p);
+const post = (p, body) => http('POST', p, { body });
+
+/** Assert a documented error envelope: { error: { code, message } }. */
+function assertErrorShape(res, allowed, label) {
+  const allowedList = Array.isArray(allowed) ? allowed : [allowed];
+  assert(
+    allowedList.includes(res.status),
+    `${label}: expected HTTP ${allowedList.join(' or ')}, got ${res.status}`,
+    { body: res.json ?? res.text.slice(0, 500) }
+  );
+  assert(
+    isObj(res.json) && isObj(res.json.error),
+    `${label}: expected JSON {error:{code,message}}, got ${res.json === undefined ? 'non-JSON' : JSON.stringify(res.json).slice(0, 400)}`,
+    { status: res.status, contentType: res.contentType, body: res.text.slice(0, 400) }
+  );
+  assert(typeof res.json.error.code === 'string' && res.json.error.code.length > 0, `${label}: error.code must be a non-empty string`);
+  assert(typeof res.json.error.message === 'string' && res.json.error.message.length > 0, `${label}: error.message must be a non-empty string`);
+  return `${res.status} ${res.json.error.code}`;
+}
+
+async function reset() {
+  const r = await post('/api/reset', {});
+  assert(r.status === 200, `POST /api/reset: expected 200, got ${r.status}`, { body: r.text.slice(0, 400) });
+  assert(r.json && r.json.ok === true, 'POST /api/reset: expected body {ok:true}', { body: r.json ?? r.text.slice(0, 400) });
+}
+
+async function merchantsById() {
+  const r = await get('/api/merchants');
+  assert(r.status === 200, `GET /api/merchants: expected 200, got ${r.status}`, { body: r.text.slice(0, 400) });
+  assert(Array.isArray(r.json && r.json.merchants), 'GET /api/merchants: expected {merchants:[...]}');
+  const by = {};
+  for (const m of r.json.merchants) by[m.id] = m;
+  return { list: r.json.merchants, by };
+}
+
+async function merchant(id) {
+  const r = await get(`/api/merchants/${id}`);
+  assert(r.status === 200, `GET /api/merchants/${id}: expected 200, got ${r.status}`, { body: r.text.slice(0, 400) });
+  hasKeys(r.json, ['merchant', 'ledger', 'events'], `GET /api/merchants/${id}`);
+  return r.json;
+}
+
+async function createOrder(merchantId, productId, buyer) {
+  const r = await post(`/api/merchants/${merchantId}/orders`, {
+    product_id: productId,
+    buyer: buyer || { name: 'Sam Rivera', email: 'sam@example.com' },
+  });
+  assert(r.status === 200 || r.status === 201, `POST /api/merchants/${merchantId}/orders: expected 200/201, got ${r.status}`, { body: r.json ?? r.text.slice(0, 400) });
+  hasKeys(r.json, ['order', 'payment', 'receipt', 'event'], `order response (${merchantId}/${productId})`);
+  return r.json;
+}
+
+async function fulfill(orderId) {
+  const r = await post(`/api/orders/${orderId}/fulfill`, {});
+  assert(r.status === 200, `POST /api/orders/${orderId}/fulfill: expected 200, got ${r.status}`, { body: r.json ?? r.text.slice(0, 400) });
+  hasKeys(r.json, ['order', 'event'], 'fulfill response');
+  return r.json;
+}
+
+async function claim(orderId, reason, evidence) {
+  const r = await post(`/api/orders/${orderId}/claim`, { reason: reason || 'not_delivered', evidence: evidence === undefined ? true : evidence });
+  assert(r.status === 200, `POST /api/orders/${orderId}/claim: expected 200, got ${r.status}`, { body: r.json ?? r.text.slice(0, 400) });
+  hasKeys(r.json, ['claim', 'order', 'merchant', 'events'], 'claim response');
+  hasKeys(r.json.claim, ['id', 'order_id', 'reason', 'status', 'refund', 'paid_from_reserve', 'paid_from_pool', 'reserve_before', 'reserve_after', 'created_at'], 'claim object');
+  assert(Array.isArray(r.json.events), 'claim response: events must be an array');
+  return r.json;
+}
+
+// ---------------------------------------------------------------------------
+// Server lifecycle
+// ---------------------------------------------------------------------------
+
+let child = null;
+let reused = false;
+let childExit = null;
+let childOutput = '';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function probeHealth(ms = 1500) {
+  try {
+    const r = await fetch(`${BASE}/api/health`, { signal: AbortSignal.timeout(ms) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && j.ok === true ? j : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureServer() {
+  const existing = await probeHealth();
+  if (existing) {
+    reused = true;
+    return { mode: 'reused', health: existing };
+  }
+  const serverFile = path.join(ROOT, 'server.js');
+  if (!fs.existsSync(serverFile)) {
+    fail(`server.js not found at ${serverFile} — backend not built yet. Nothing to test.`, {
+      looked_for: serverFile,
+      root: ROOT,
+    });
+  }
+  const childEnv = { ...process.env, PORT: String(PORT) };
+  // Deterministic baseline: no AI key, no live PayPal, unless the caller opts in.
+  // (Otherwise a developer's exported PAYPAL_LIVE=1 would make orders 'pending' and
+  // the SIM-only assertions below meaningless.)
+  if (process.env.E2E_ALLOW_LIVE !== '1') {
+    for (const k of ['AI_API_KEY', 'PAYPAL_LIVE', 'PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET']) delete childEnv[k];
+  }
+  child = spawn(process.execPath, ['server.js'], {
+    cwd: ROOT,
+    env: childEnv,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stdout.on('data', (d) => {
+    childOutput += d.toString();
+  });
+  child.stderr.on('data', (d) => {
+    childOutput += d.toString();
+  });
+  child.on('exit', (code, signal) => {
+    childExit = { code, signal };
+  });
+  child.on('error', (e) => {
+    childOutput += `spawn error: ${e.message}\n`;
+  });
+
+  const deadline = Date.now() + BOOT_TIMEOUT;
+  while (Date.now() < deadline) {
+    if (childExit) fail(`spawned server exited before answering /api/health (code ${childExit.code}, signal ${childExit.signal})`, { server_output: childOutput.slice(-1500) });
+    const h = await probeHealth(1000);
+    if (h) return { mode: 'spawned', health: h };
+    await sleep(200);
+  }
+  fail(`spawned server did not answer /api/health within ${BOOT_TIMEOUT}ms`, { server_output: childOutput.slice(-1500), port: PORT });
+}
+
+async function stopServer() {
+  if (!child || reused) return;
+  if (childExit) return;
+  child.kill('SIGTERM');
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline && !childExit) await sleep(50);
+  if (!childExit) {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// v2 helpers — agents / passports / contracts / protection / claims
+// (HACKATHON-DEMO-SPEC.md; additive endpoints, existing shapes unchanged)
+// ---------------------------------------------------------------------------
+
+async function agentsList() {
+  const r = await get('/api/agents');
+  eq(r.status, 200, 'GET /api/agents status');
+  assert(Array.isArray(r.json && r.json.agents), 'GET /api/agents: expected {agents:[...]}');
+  const by = {};
+  for (const a of r.json.agents) by[a.id] = a;
+  return { list: r.json.agents, by };
+}
+
+async function agentVerify(body) {
+  const r = await post('/api/agents/verify', body);
+  assert(r.status === 200, `POST /api/agents/verify ${JSON.stringify(body)}: expected 200, got ${r.status}`, { body: r.json ?? r.text.slice(0, 500) });
+  hasKeys(r.json, ['verified', 'agent', 'checks', 'reasons'], 'agent verify response');
+  return r.json;
+}
+
+async function createContract(body) {
+  const r = await post('/api/contracts', body);
+  assert([200, 201].includes(r.status), `POST /api/contracts ${JSON.stringify(body)}: expected 200/201, got ${r.status}`, { body: r.json ?? r.text.slice(0, 500) });
+  hasKeys(r.json, ['contract'], 'contract create response');
+  return r.json.contract;
+}
+
+async function getContract(id) {
+  const r = await get(`/api/contracts/${id}`);
+  assert(r.status === 200, `GET /api/contracts/${id}: expected 200, got ${r.status}`, { body: r.json ?? r.text.slice(0, 500) });
+  hasKeys(r.json, ['contract'], 'contract get response');
+  return r.json.contract;
+}
+
+function contractOffer(id, from, price, note) {
+  const body = { from, price };
+  if (note) body.note = note;
+  return post(`/api/contracts/${id}/offers`, body);
+}
+
+async function protectionQuote(merchantId, amount) {
+  const r = await post('/api/protection/quote', { merchant_id: merchantId, amount });
+  assert(r.status === 200, `POST /api/protection/quote: expected 200, got ${r.status}`, { body: r.json ?? r.text.slice(0, 500) });
+  hasKeys(r.json, ['quote'], 'protection quote response');
+  return r.json.quote;
+}
+
+// ---------------------------------------------------------------------------
+// Suite
+// ---------------------------------------------------------------------------
+
+async function main() {
+  print('');
+  print(`Settled e2e — target ${BASE}`);
+  print('------------------------------------------------------------');
+
+  const boot = await ensureServer();
+  print(`server: ${boot.mode}${reused ? '' : ' (pid ' + child.pid + ')'} — health ${JSON.stringify(boot.health)}`);
+  print('');
+
+  await reset(); // deterministic starting state
+
+  // ---- §9 static analysis ------------------------------------------------
+  await test('T00', '§9 node --check passes on server.js + lib/*.js', async () => {
+    const serverFile = path.join(ROOT, 'server.js');
+    if (!fs.existsSync(serverFile)) return 'skipped (no local server.js next to test/)';
+    const { spawnSync } = require('node:child_process');
+    const rels = ['server.js'];
+    const libDir = path.join(ROOT, 'lib');
+    if (fs.existsSync(libDir)) {
+      for (const f of fs.readdirSync(libDir).filter((x) => x.endsWith('.js')).sort()) rels.push(`lib/${f}`);
+    }
+    const bad = [];
+    for (const rel of rels) {
+      const r = spawnSync(process.execPath, ['--check', path.join(ROOT, rel)], { encoding: 'utf8' });
+      if (r.status !== 0) bad.push(`${rel}: ${String(r.stderr || '').trim().split('\n')[0]}`);
+    }
+    assert(bad.length === 0, `node --check failed: ${bad.join(' | ')}`, { checked: rels });
+    return `${rels.length} files parse`;
+  });
+
+  // ---- §8.1 health + seed ------------------------------------------------
+  await test('T01', 'GET /api/health → ok, sim|paypal, 3 merchants', async () => {
+    const r = await get('/api/health');
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['ok', 'mode', 'merchants'], 'health');
+    eq(r.json.ok, true, 'health.ok');
+    assert(['sim', 'paypal'].includes(r.json.mode), `health.mode: expected "sim" or "paypal", got ${JSON.stringify(r.json.mode)}`);
+    eq(num(r.json.merchants), 3, 'health.merchants');
+    return `mode=${r.json.mode}`;
+  });
+
+  await test('T02', '§8.1 merchant list = 3, seed tiers/scores/fees/caps/reserves exact', async () => {
+    const { list, by } = await merchantsById();
+    eq(list.length, 3, 'merchant count');
+    for (const id of ['m1', 'm2', 'm3']) {
+      const m = by[id];
+      assert(isObj(m), `merchant ${id} missing from list`);
+      const s = SEED[id];
+      eq(m.name, s.name, `${id}.name`);
+      eq(m.tier, s.tier, `${id}.tier`);
+      near(m.score, s.score, `${id}.score`);
+      near(m.fee_bps, s.fee_bps, `${id}.fee_bps`);
+      near(m.cap, s.cap, `${id}.cap`);
+      near(m.reserve, s.reserve, `${id}.reserve`);
+      eq(m.mode, s.mode, `${id}.mode`);
+      hasKeys(m, ['domain', 'category', 'metrics', 'products'], `${id} public merchant`);
+      assert(Array.isArray(m.products) && m.products.length > 0, `${id}.products must be a non-empty array`);
+    }
+    const p1 = by.m1.products.find((p) => p.id === 'p1');
+    assert(p1, 'm1.products must include p1');
+    near(p1.price, PRODUCTS.p1.price, 'p1.price');
+    return 'm1=A/91/35/5000/12500, m2=B/76/90/2500/4000, m3=C/54/150/1000/900';
+  });
+
+  await test('T03', 'GET /api/merchants/m1 → merchant + ledger{credential,signature,alg} + events', async () => {
+    const r = await get('/api/merchants/m1');
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['merchant', 'ledger', 'events'], 'merchant detail');
+    hasKeys(r.json.ledger, ['credential', 'signature', 'alg'], 'ledger');
+    eq(r.json.ledger.alg, 'HS256', 'ledger.alg');
+    assert(Array.isArray(r.json.events), 'events must be an array');
+    const c = r.json.ledger.credential;
+    hasKeys(c, ['v', 'issuer', 'issued_at', 'expires_at', 'nonce', 'merchant', 'metrics', 'score', 'tier', 'fee_bps', 'cap', 'reserve', 'evidence_hash'], 'credential');
+    eq(num(c.v), 1, 'credential.v');
+    eq(c.issuer, 'Settled', 'credential.issuer');
+    assert(isIso(c.issued_at), `credential.issued_at must be ISO, got ${JSON.stringify(c.issued_at)}`);
+    assert(isIso(c.expires_at), `credential.expires_at must be ISO, got ${JSON.stringify(c.expires_at)}`);
+    const ttl = Date.parse(c.expires_at) - Date.parse(c.issued_at);
+    assert(Math.abs(ttl - 24 * 3600 * 1000) < 60000, `credential TTL: expected ~24h, got ${Math.round(ttl / 60000)}min`);
+    assert(/^[0-9a-f]{16}$/i.test(String(c.nonce)), `credential.nonce: expected 16 hex chars, got ${JSON.stringify(c.nonce)}`);
+    eq(c.merchant && c.merchant.id, 'm1', 'credential.merchant.id');
+    eq(c.tier, 'A', 'credential.tier');
+    near(c.score, 91, 'credential.score');
+    near(c.fee_bps, 35, 'credential.fee_bps');
+    near(c.cap, 5000, 'credential.cap');
+    near(c.reserve, 12500, 'credential.reserve');
+    assert(typeof c.evidence_hash === 'string' && /^[0-9a-f]{64}$/i.test(c.evidence_hash), `credential.evidence_hash: expected sha256 hex, got ${JSON.stringify(c.evidence_hash)}`);
+    return `signature ${String(r.json.ledger.signature).slice(0, 12)}…`;
+  });
+
+  await test('T04', '§8.2 POST /api/merchants/m1/verify → valid + all checks true', async () => {
+    const r = await post('/api/merchants/m1/verify', {});
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['valid', 'checks', 'credential'], 'verify response');
+    eq(r.json.valid, true, 'valid');
+    hasKeys(r.json.checks, ['signature', 'issuer', 'not_expired'], 'checks');
+    eq(r.json.checks.signature, true, 'checks.signature');
+    eq(r.json.checks.issuer, true, 'checks.issuer');
+    eq(r.json.checks.not_expired, true, 'checks.not_expired');
+    return 'valid=true';
+  });
+
+  // ---- tamper ------------------------------------------------------------
+  await test('T05', '§8.2 tampered credential fails verification', async () => {
+    const led = await get('/api/merchants/m1/ledger');
+    eq(led.status, 200, 'ledger status');
+    const credential = JSON.parse(JSON.stringify(led.json.credential));
+    const signature = led.json.signature;
+    assert(signature, 'ledger.signature missing');
+
+    // Tamper two fields: the score (top-level, signed) and a nested metric.
+    credential.score = num(credential.score) + 7;
+    if (credential.metrics) credential.metrics.delivered_pct = 100;
+
+    const attempts = [];
+    // (a) documented merchant verify endpoint, with the credential supplied.
+    const a = await http('POST', '/api/merchants/m1/verify', { body: { credential, signature } });
+    attempts.push({ endpoint: 'POST /api/merchants/m1/verify', status: a.status, valid: a.json && a.json.valid, checks: a.json && a.json.checks });
+    if (a.status === 200 && isObj(a.json) && a.json.valid === false) {
+      assert(a.json.checks && a.json.checks.signature === false, 'tampered credential rejected but checks.signature was not false', { body: a.json });
+      return 'rejected: valid=false, checks.signature=false';
+    }
+    // (b) agent trust check, with the credential supplied.
+    const b = await http('POST', '/api/trust/verify', { body: { merchant_id: 'm1', min_tier: 'C', credential, signature } });
+    attempts.push({ endpoint: 'POST /api/trust/verify', status: b.status, verified: b.json && b.json.verified, reasons: b.json && b.json.reasons });
+    if (b.status === 200 && isObj(b.json) && b.json.verified === false) {
+      return 'rejected by /api/trust/verify with supplied credential';
+    }
+    // (c) tampered signature against the merchant verify endpoint.
+    const badSig = String(signature).slice(0, -2) + (String(signature).slice(-2) === '00' ? 'ff' : '00');
+    const c = await http('POST', '/api/merchants/m1/verify', { body: { credential, signature: badSig } });
+    attempts.push({ endpoint: 'POST /api/merchants/m1/verify (bad signature)', status: c.status, valid: c.json && c.json.valid });
+
+    fail(
+      'no documented endpoint accepted an externally supplied credential, so tampering cannot be exercised through the API',
+      { attempts, note: 'CONTRACT GAP: §5 gives no verify-with-body contract. Backend can fix in 3 lines by accepting optional {credential, signature} on the verify endpoints.' }
+    );
+  });
+
+  // ---- static ------------------------------------------------------------
+  await test('T06', 'static: GET / → 200, contains "Settled"', async () => {
+    const r = await get('/');
+    eq(r.status, 200, 'status');
+    assert(/html/i.test(r.contentType), `content-type: expected HTML, got ${r.contentType}`);
+    assert(/settled/i.test(r.text), 'body must contain the "Settled" marker');
+    assert(r.text.length > 500, `body suspiciously short (${r.text.length} bytes)`);
+    return `${r.text.length} bytes`;
+  });
+
+  await test('T07', 'static: /store.html → 200, "Settled"', async () => {
+    const r = await get('/store.html');
+    eq(r.status, 200, 'status');
+    assert(/settled/i.test(r.text), 'body must contain the "Settled" marker');
+    return `${r.text.length} bytes`;
+  });
+
+  await test('T08', 'static: /agent.html → 200, "Settled"', async () => {
+    const r = await get('/agent.html');
+    eq(r.status, 200, 'status');
+    assert(/settled/i.test(r.text), 'body must contain the "Settled" marker');
+    return `${r.text.length} bytes`;
+  });
+
+  await test('T09', 'static: /app.js + /styles.css → 200; app.js calls the API', async () => {
+    const js = await get('/app.js');
+    eq(js.status, 200, 'app.js status');
+    assert(js.text.length > 200, `app.js suspiciously short (${js.text.length} bytes)`);
+    // Accept both '/api/...' literals and a banned-style API base ('/api' + path).
+    const apiRefs = (js.text.match(/['"`]\/api/g) || []).length;
+    assert(apiRefs >= 1, `app.js must call the API (found no '/api' literal; ${js.text.length} bytes)`);
+    const css = await get('/styles.css');
+    eq(css.status, 200, 'styles.css status');
+    assert(css.text.length > 200, `styles.css suspiciously short (${css.text.length} bytes)`);
+    return `app.js ${js.text.length}B (${apiRefs} api refs), styles.css ${css.text.length}B`;
+  });
+
+  await test('T10', 'static: unknown path → 404', async () => {
+    const r = await get('/nope-not-here.html');
+    eq(r.status, 404, 'status');
+    return '404';
+  });
+
+  // ---- fault shapes ------------------------------------------------------
+  await test('T11', 'fault: GET /api/unknown → 404 {error:{code,message}}', async () => {
+    const r = await get('/api/unknown-endpoint');
+    return assertErrorShape(r, 404, 'unknown API path');
+  });
+
+  await test('T12', 'fault: GET /api/merchants/zzz → 404 error envelope', async () => {
+    const r = await get('/api/merchants/zzz');
+    return assertErrorShape(r, 404, 'unknown merchant');
+  });
+
+  await test('T13', 'fault: POST order for unknown merchant → 404 error envelope', async () => {
+    const r = await post('/api/merchants/zzz/orders', { product_id: 'p1' });
+    return assertErrorShape(r, [400, 404], 'order for unknown merchant');
+  });
+
+  await test('T14', 'fault: POST order missing product_id → 400 error envelope', async () => {
+    const r = await post('/api/merchants/m1/orders', { buyer: { name: 'Sam Rivera', email: 'sam@example.com' } });
+    return assertErrorShape(r, 400, 'missing product_id');
+  });
+
+  await test('T15', 'fault: POST order unknown product_id → 400/404 error envelope', async () => {
+    const r = await post('/api/merchants/m1/orders', { product_id: 'p999', buyer: { name: 'Sam Rivera', email: 'sam@example.com' } });
+    return assertErrorShape(r, [400, 404], 'unknown product_id');
+  });
+
+  await test('T16', 'fault: malformed JSON body → 400 error envelope', async () => {
+    const r = await http('POST', '/api/merchants/m1/orders', { body: '{not json' });
+    return assertErrorShape(r, 400, 'malformed JSON');
+  });
+
+  await test('T17', 'fault: fulfill unknown order → 404 error envelope', async () => {
+    const r = await post('/api/orders/ord_deadbeef/fulfill', {});
+    return assertErrorShape(r, 404, 'fulfill unknown order');
+  });
+
+  await test('T18', 'fault: claim unknown order → 404 error envelope', async () => {
+    const r = await post('/api/orders/ord_deadbeef/claim', { reason: 'not_delivered', evidence: true });
+    return assertErrorShape(r, 404, 'claim unknown order');
+  });
+
+  // ---- §8.3–8.5 order / fulfill / claim on m1 ----------------------------
+  let m1Order;
+  await test('T19', '§8.3 m1 order p1 → 249.00, fee 0.87 (35bps), instant, cap 5000', async () => {
+    const r = await createOrder('m1', 'p1');
+    m1Order = r;
+    const o = r.order;
+    hasKeys(o, ['id', 'merchant_id', 'product_id', 'product_name', 'amount', 'fee_bps', 'fee', 'protection', 'status', 'payment_id', 'buyer', 'created_at', 'delivered_at'], 'order');
+    assert(/^ord_[0-9a-f]+$/i.test(String(o.id)), `order.id: expected ord_<hex>, got ${JSON.stringify(o.id)}`);
+    eq(o.merchant_id, 'm1', 'order.merchant_id');
+    eq(o.product_id, 'p1', 'order.product_id');
+    near(o.amount, 249.0, 'order.amount');
+    near(o.fee_bps, 35, 'order.fee_bps');
+    near(o.fee, 0.87, 'order.fee');
+    hasKeys(o.protection, ['mode', 'cap'], 'order.protection');
+    eq(o.protection.mode, 'instant', 'order.protection.mode');
+    near(o.protection.cap, 5000, 'order.protection.cap');
+    eq(o.status, 'paid', 'order.status');
+    assert(String(o.payment_id).startsWith('SIM-'), `order.payment_id: expected SIM-<hex>, got ${JSON.stringify(o.payment_id)}`);
+    eq(o.delivered_at, null, 'order.delivered_at');
+    hasKeys(o.buyer, ['name', 'email'], 'order.buyer');
+    hasKeys(r.payment, ['mode', 'id'], 'payment');
+    hasKeys(r.receipt, ['order_id', 'paid', 'captured_at', 'credential_hash'], 'receipt');
+    eq(r.receipt.order_id, o.id, 'receipt.order_id');
+    assert(isIso(r.receipt.captured_at), `receipt.captured_at must be ISO, got ${JSON.stringify(r.receipt.captured_at)}`);
+    hasKeys(r.event, ['type'], 'order event');
+    return `${o.id} $249.00 fee $0.87`;
+  });
+
+  await test('T20', '§8.4 fulfill → status delivered, delivered_at set', async () => {
+    const r = await fulfill(m1Order.order.id);
+    const o = r.order;
+    assert(['delivered', 'fulfilled'].includes(String(o.status)), `order.status: expected "delivered", got ${JSON.stringify(o.status)}`);
+    assert(o.delivered_at !== null && o.delivered_at !== undefined, `order.delivered_at: expected a timestamp, got ${JSON.stringify(o.delivered_at)}`);
+    assert(isIso(o.delivered_at), `order.delivered_at must be ISO, got ${JSON.stringify(o.delivered_at)}`);
+    return `status=${o.status}`;
+  });
+
+  await test('T21', '§8.4 fulfill a non-paid order again → 409 error envelope', async () => {
+    const r = await post(`/api/orders/${m1Order.order.id}/fulfill`, {});
+    return assertErrorShape(r, 409, 'double fulfill');
+  });
+
+  await test('T22', '§8.5 claim → refund 249, reserve 12500→12251, order refunded', async () => {
+    const r = await claim(m1Order.order.id, 'not_delivered', true);
+    const c = r.claim;
+    eq(c.order_id, m1Order.order.id, 'claim.order_id');
+    eq(c.status, 'approved', 'claim.status');
+    near(c.refund, 249.0, 'claim.refund');
+    near(c.paid_from_reserve, 249.0, 'claim.paid_from_reserve');
+    near(c.paid_from_pool, 0, 'claim.paid_from_pool');
+    near(c.reserve_before, 12500, 'claim.reserve_before');
+    near(c.reserve_after, 12251, 'claim.reserve_after');
+    eq(r.order.status, 'refunded', 'order.status');
+    near(r.merchant.reserve, 12251, 'merchant.reserve');
+    eq(r.merchant.tier, 'A', 'merchant.tier should stay A after one claim');
+    assert(typeof r.merchant.score === 'number' || num(r.merchant.score) !== null, 'merchant.score missing');
+    hasKeys(r.merchant, ['id', 'tier', 'score', 'reserve', 'fee_bps', 'cap', 'mode'], 'claim.merchant');
+    const types = r.events.map((e) => e && e.type);
+    for (const t of ['claim', 'refund', 'reserve_change']) {
+      assert(types.includes(t), `claim events must include a "${t}" event, got [${types.join(', ')}]`, { events: types });
+    }
+    return `refund $249, reserve 12500→12251`;
+  });
+
+  await test('T23', '§8.5 second claim on same order → 409 error envelope', async () => {
+    const r = await post(`/api/orders/${m1Order.order.id}/claim`, { reason: 'damaged', evidence: true });
+    return assertErrorShape(r, 409, 'double claim');
+  });
+
+  await test('T24', 'recompute: tier ⇄ score band and tier ⇄ fee/cap/mode consistent after claim', async () => {
+    const { by } = await merchantsById();
+    const m = by.m1;
+    const score = num(m.score);
+    const expectedTier = score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D';
+    eq(m.tier, expectedTier, `m1.tier for score ${score}`);
+    const d = TIER[m.tier];
+    near(m.fee_bps, d.fee_bps, `m1.fee_bps for tier ${m.tier}`);
+    near(m.cap, d.cap, `m1.cap for tier ${m.tier}`);
+    eq(m.mode, d.mode, `m1.mode for tier ${m.tier}`);
+    near(m.reserve, 12251, 'm1.reserve after claim');
+    return `tier ${m.tier} score ${score} consistent`;
+  });
+
+  await test('T25', 'claim validation: invalid reason → 400 error envelope', async () => {
+    const o = await createOrder('m2', 'p3');
+    const r = await post(`/api/orders/${o.order.id}/claim`, { reason: 'bogus_reason', evidence: true });
+    return assertErrorShape(r, 400, 'invalid claim reason');
+  });
+
+  await test('T26', 'claim validation: evidence !== true → 400, order unchanged', async () => {
+    const o = await createOrder('m2', 'p3');
+    const r = await post(`/api/orders/${o.order.id}/claim`, { reason: 'damaged', evidence: false });
+    const detail = assertErrorShape(r, 400, 'claim without evidence');
+    const after = await get(`/api/orders?merchant=m2`);
+    eq(after.status, 200, 'orders list status');
+    const found = (after.json.orders || []).find((x) => x.id === o.order.id);
+    assert(found, 'order should still exist after rejected claim');
+    assert(['paid', 'delivered'].includes(String(found.status)), `order.status after rejected claim: expected paid/delivered, got ${JSON.stringify(found.status)}`);
+    return detail;
+  });
+
+  // ---- §8.6 escrow merchant ---------------------------------------------
+  await test('T27', '§8.6 m3 order → mode escrow, cap 1000; claim evidence=false → 400', async () => {
+    const r = await createOrder('m3', 'p5');
+    const o = r.order;
+    eq(o.protection.mode, 'escrow', 'm3 order protection.mode');
+    near(o.protection.cap, 1000, 'm3 order protection.cap');
+    near(o.amount, 159.0, 'm3 order amount');
+    near(o.fee_bps, 150, 'm3 order fee_bps');
+    assert(Math.abs(num(o.fee) - 2.385) <= 0.005, `m3 order fee: expected 159*150/10000 ≈ 2.39, got ${JSON.stringify(o.fee)}`);
+    const bad = await post(`/api/orders/${o.id}/claim`, { reason: 'damaged', evidence: false });
+    const detail = assertErrorShape(bad, 400, 'm3 claim evidence=false');
+    // valid claim still works on this order
+    const okClaim = await claim(o.id, 'damaged', true);
+    near(okClaim.claim.refund, 159.0, 'm3 claim refund');
+    return `escrow cap 1000, ${detail}`;
+  });
+
+  // ---- §8.7 trust verify -------------------------------------------------
+  await test('T28', '§8.7 POST /api/trust/verify m1 min_tier=B → verified true', async () => {
+    const r = await post('/api/trust/verify', { merchant_id: 'm1', min_tier: 'B' });
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['verified', 'merchant_id', 'tier', 'score', 'cap', 'fee_bps', 'mode', 'reasons', 'credential', 'signature', 'checked_at'], 'trust verify');
+    eq(r.json.verified, true, 'verified');
+    eq(r.json.merchant_id, 'm1', 'merchant_id');
+    eq(r.json.tier, 'A', 'tier');
+    assert(Array.isArray(r.json.reasons) && r.json.reasons.length === 0, `reasons: expected [], got ${JSON.stringify(r.json.reasons)}`);
+    assert(isIso(r.json.checked_at), 'checked_at must be ISO');
+    return 'verified=true tier=A';
+  });
+
+  await test('T29', '§8.7 trust/verify m3 min_tier=B → verified false with reason', async () => {
+    const r = await post('/api/trust/verify', { merchant_id: 'm3', min_tier: 'B' });
+    eq(r.status, 200, 'status');
+    eq(r.json.verified, false, 'verified');
+    eq(r.json.tier, 'C', 'tier');
+    assert(Array.isArray(r.json.reasons) && r.json.reasons.length > 0, `reasons: expected a non-empty list, got ${JSON.stringify(r.json.reasons)}`);
+    const joined = JSON.stringify(r.json.reasons).toLowerCase();
+    assert(joined.includes('tier') || joined.includes('below') || joined.includes('minimum') || joined.includes('b'), `reasons should explain the tier failure, got ${JSON.stringify(r.json.reasons)}`);
+    return `verified=false reasons=${JSON.stringify(r.json.reasons).slice(0, 90)}`;
+  });
+
+  await test('T30', '§8.7 trust/verify default min_tier=C accepts tier C', async () => {
+    const r = await post('/api/trust/verify', { merchant_id: 'm3' });
+    eq(r.status, 200, 'status');
+    eq(r.json.verified, true, 'verified with default min_tier');
+    return 'default min_tier=C, m3 verified';
+  });
+
+  await test('T31', 'fault: trust/verify unknown merchant → 404 error envelope', async () => {
+    const r = await post('/api/trust/verify', { merchant_id: 'zzz', min_tier: 'B' });
+    return assertErrorShape(r, [400, 404], 'trust verify unknown merchant');
+  });
+
+  // ---- lists + sorting ---------------------------------------------------
+  await test('T32', 'GET /api/orders?merchant=m1 → array, newest first', async () => {
+    await createOrder('m1', 'p2');
+    await sleep(5);
+    const second = await createOrder('m1', 'p1');
+    const r = await get('/api/orders?merchant=m1');
+    eq(r.status, 200, 'status');
+    assert(Array.isArray(r.json.orders), 'expected {orders:[...]}');
+    assert(r.json.orders.length >= 2, `expected at least 2 orders, got ${r.json.orders.length}`);
+    const ids = r.json.orders.map((o) => o.id);
+    assert(ids.includes(second.order.id), 'newest order missing from list');
+    const times = r.json.orders.map((o) => Date.parse(o.created_at));
+    assert(times.every((t) => !Number.isNaN(t)), 'order.created_at must be ISO');
+    for (let i = 1; i < times.length; i++) {
+      assert(times[i - 1] >= times[i], `orders not sorted newest-first at index ${i}: ${r.json.orders[i - 1].created_at} < ${r.json.orders[i].created_at}`);
+    }
+    return `${r.json.orders.length} orders`;
+  });
+
+  await test('T33', 'GET /api/events?merchant=m1 → array, seq desc', async () => {
+    const r = await get('/api/events?merchant=m1');
+    eq(r.status, 200, 'status');
+    assert(Array.isArray(r.json.events), 'expected {events:[...]}');
+    assert(r.json.events.length > 0, 'expected events after order/claim activity');
+    const seqs = r.json.events.map((e) => num(e.seq));
+    assert(seqs.every((s) => s !== null), 'every event must have a numeric seq');
+    for (let i = 1; i < seqs.length; i++) {
+      assert(seqs[i - 1] >= seqs[i], `events not sorted seq desc at index ${i}: ${seqs[i - 1]} < ${seqs[i]}`);
+    }
+    const e0 = r.json.events[0];
+    hasKeys(e0, ['type', 'hash'], 'event');
+    assert(/^[0-9a-f]{64}$/i.test(String(e0.hash)), `event.hash: expected sha256 hex, got ${JSON.stringify(e0.hash)}`);
+    return `${r.json.events.length} events, head seq ${seqs[0]}`;
+  });
+
+  await test('T34', '§8.8 POST /api/reset → seed fully restored, orders empty', async () => {
+    const resetRes = await post('/api/reset', {});
+    eq(resetRes.status, 200, 'reset status');
+    eq(resetRes.json && resetRes.json.ok, true, 'reset.ok');
+    const { by } = await merchantsById();
+    for (const id of ['m1', 'm2', 'm3']) {
+      const s = SEED[id];
+      const m = by[id];
+      eq(m.tier, s.tier, `${id}.tier after reset`);
+      near(m.score, s.score, `${id}.score after reset`);
+      near(m.fee_bps, s.fee_bps, `${id}.fee_bps after reset`);
+      near(m.cap, s.cap, `${id}.cap after reset`);
+      near(m.reserve, s.reserve, `${id}.reserve after reset`);
+      eq(m.mode, s.mode, `${id}.mode after reset`);
+      const metrics = m.metrics || {};
+      if ('orders' in metrics) near(metrics.orders, s.orders, `${id}.metrics.orders after reset`);
+      if ('disputes' in metrics) near(metrics.disputes, s.disputes, `${id}.metrics.disputes after reset`);
+    }
+    const orders = await get('/api/orders?merchant=m1');
+    eq(orders.status, 200, 'orders status');
+    eq((orders.json.orders || []).length, 0, 'm1 orders after reset');
+    return 'seed restored, m1 orders purged';
+  });
+
+  // ---- reserve → network pool shortfall ----------------------------------
+  await test('T35', 'claim pays from reserve, then shortfall from network pool + accounting identity', async () => {
+    await reset();
+    // Order creation happens while m3 is still tier C (escrow) — before claims move it.
+    const orders = [];
+    for (let i = 0; i < 6; i++) orders.push((await createOrder('m3', 'p5')).order);
+    let sawPool = null;
+    let reserve = num((await merchantsById()).by.m3.reserve);
+    const series = [];
+    for (const o of orders) {
+      await fulfill(o.id);
+      const r = await claim(o.id, 'not_delivered', true);
+      const c = r.claim;
+      const entry = {
+        tier_after: r.merchant && r.merchant.tier,
+        refund: num(c.refund),
+        from_reserve: num(c.paid_from_reserve),
+        from_pool: num(c.paid_from_pool),
+        reserve_before: num(c.reserve_before),
+        reserve_after: num(c.reserve_after),
+      };
+      series.push(entry);
+      assert(entry.from_reserve + entry.from_pool === entry.refund || Math.abs(entry.from_reserve + entry.from_pool - entry.refund) < 0.005,
+        `claim ${series.length}: paid_from_reserve + paid_from_pool (${entry.from_reserve} + ${entry.from_pool}) != refund (${entry.refund})`, { claim_series: series });
+      assert(entry.refund >= 158.995,
+        `claim ${series.length}: refund ${entry.refund} < order.protection.cap-bounded 159 — claim appears to use the merchant's CURRENT cap (tier ${entry.tier_after}) instead of order.protection.cap (§5)`, { claim_series: series });
+      assert(entry.from_reserve <= reserve + 0.005, `claim ${series.length}: paid_from_reserve (${entry.from_reserve}) exceeds reserve_before (${reserve})`, { claim_series: series });
+      reserve = entry.reserve_after;
+      assert(reserve >= -0.005, `claim ${series.length}: reserve_after went negative (${reserve})`, { claim_series: series });
+      if (entry.from_pool > 0) {
+        sawPool = c;
+        break;
+      }
+    }
+    assert(sawPool !== null, 'never drew from the network pool after depleting a $900 reserve with $159 claims — expected a shortfall by claim 6', {
+      claim_series: series,
+      note: 'check refund uses order.protection.cap (1000) and the reserve+pool floor, and that claims are not blocked by tier downgrade',
+    });
+    near(sawPool.paid_from_reserve, 105, 'shortfall claim paid_from_reserve');
+    near(sawPool.paid_from_pool, 54, 'shortfall claim paid_from_pool');
+    near(sawPool.reserve_after, 0, 'shortfall claim reserve_after');
+    const m = (await merchantsById()).by.m3;
+    near(m.reserve, 0, 'm3 reserve after shortfall');
+    return `shortfall: reserve ${sawPool.paid_from_reserve} + pool ${sawPool.paid_from_pool} = ${sawPool.refund}`;
+  });
+
+  await test('T36', 'cleanup: final reset leaves seed state for the demo', async () => {
+    await reset();
+    const { by } = await merchantsById();
+    near(by.m1.reserve, 12500, 'm1.reserve');
+    near(by.m3.reserve, 900, 'm3.reserve');
+    eq(by.m1.tier, 'A', 'm1.tier');
+    return 'seed restored';
+  });
+
+  // =========================================================================
+  // v2 — HACKATHON DEMO SPEC: agents, passport, contracts, protection, demo
+  // =========================================================================
+  await reset();
+  let autoContract = null;
+  let accOrder = null;
+  let claimedId = null;
+
+  await test('T40', 'v2 GET /api/agents → 3 agents; a1 valid, a3 invalid', async () => {
+    const { list, by } = await agentsList();
+    eq(list.length, 3, 'agent count');
+    for (const id of ['a1', 'a2', 'a3']) {
+      const a = by[id];
+      assert(isObj(a), `agent ${id} missing from list`);
+      hasKeys(a, ['id', 'name', 'operator', 'kyb', 'capabilities', 'limits', 'reputation', 'status'], `agent ${id}`);
+      assert(Array.isArray(a.capabilities) && a.capabilities.length > 0, `${id}.capabilities must be a non-empty array`);
+      hasKeys(a.limits, ['max_amount'], `${id}.limits`);
+      hasKeys(a.reputation, ['orders', 'claims', 'violations', 'score'], `${id}.reputation`);
+    }
+    eq(by.a1.name, 'ProcureBot', 'a1.name');
+    eq(by.a1.status, 'valid', 'a1.status');
+    assert(['verified', true].includes(by.a1.kyb), `a1.kyb: expected verified, got ${JSON.stringify(by.a1.kyb)}`);
+    near(by.a1.limits.max_amount, 500, 'a1.limits.max_amount');
+    near(by.a1.reputation.score, 92, 'a1.reputation.score');
+    eq(by.a3.status, 'invalid', 'a3.status');
+    assert(['unverified', false].includes(by.a3.kyb), `a3.kyb: expected unverified, got ${JSON.stringify(by.a3.kyb)}`);
+    return 'a1 valid (ProcureBot, kyb verified, max $500), a3 invalid';
+  });
+
+  await test('T41', 'v2 POST /api/agents/verify a1 → verified true, all six checks true', async () => {
+    const v = await agentVerify({ agent_id: 'a1' });
+    eq(v.verified, true, 'verified');
+    hasKeys(v.checks, ['passport', 'mandate', 'limits', 'merchant', 'category', 'kyb'], 'checks');
+    for (const k of ['passport', 'mandate', 'limits', 'merchant', 'category', 'kyb']) {
+      eq(v.checks[k], true, `checks.${k}`);
+    }
+    assert(Array.isArray(v.reasons) && v.reasons.length === 0, `reasons: expected [], got ${JSON.stringify(v.reasons)}`);
+    hasKeys(v.passport, ['credential', 'signature', 'alg'], 'verify.passport');
+    eq(v.passport.alg, 'HS256', 'passport.alg');
+    eq(v.agent && v.agent.id, 'a1', 'agent.id');
+    return 'verified=true, passport/mandate/limits/merchant/category/kyb all true';
+  });
+
+  await test('T42', 'v2 POST /api/agents/verify a3 → false with kyb/mandate reasons', async () => {
+    const v = await agentVerify({ agent_id: 'a3' });
+    eq(v.verified, false, 'verified');
+    assert(Array.isArray(v.reasons) && v.reasons.length > 0, `reasons must be a non-empty array, got ${JSON.stringify(v.reasons)}`);
+    const txt = JSON.stringify(v.reasons).toLowerCase();
+    assert(/kyb|mandate|violation|invalid|unverified|expired/.test(txt), `reasons should cite kyb/mandate/violations, got ${JSON.stringify(v.reasons)}`);
+    eq(v.checks.kyb, false, 'checks.kyb for a3');
+    assert(v.checks.passport === false || v.checks.passport === true, 'checks.passport must be boolean');
+    return `verified=false, reasons=${JSON.stringify(v.reasons).slice(0, 120)}`;
+  });
+
+  await test('T43', 'v2 GET /api/agents/a1/passport → credential/signature/alg (+ tamper probe)', async () => {
+    const r = await get('/api/agents/a1/passport');
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['credential', 'signature', 'alg'], 'passport envelope');
+    eq(r.json.alg, 'HS256', 'alg');
+    const c = r.json.credential;
+
+    // Probe tamper support FIRST, so the result is reported even if the shape check fails.
+    const tampered = JSON.parse(JSON.stringify(c));
+    tampered.reputation.score = 99;
+    tampered.limits.max_amount = 5000;
+    const t = await http('POST', '/api/agents/verify', { body: { agent_id: 'a1', credential: tampered, signature: r.json.signature } });
+    let probe;
+    if (t.status === 200 && isObj(t.json) && t.json.verified === false) {
+      probe = 'tampered passport rejected (verified=false)';
+    } else if (t.status === 200 && isObj(t.json) && t.json.verified === true) {
+      probe = 'tamper NOT exercised — verify ignores a caller-supplied credential (spec §2 parenthetical)';
+    } else {
+      probe = `tamper probe returned HTTP ${t.status}`;
+    }
+
+    try {
+      hasKeys(c, ['agent_id', 'name', 'operator', 'capabilities', 'limits', 'mandate', 'reputation', 'issued_at', 'expires_at', 'sig'], 'passport credential');
+    } catch (e) {
+      e.evidence = {
+        credential_keys: Object.keys(c),
+        tamper_probe: probe,
+        note: 'SPEC §1 lists sig (HMAC over base64url(JSON)) inside the passport credential; the envelope has signature but a portable credential must carry its own sig.',
+      };
+      throw e;
+    }
+    eq(c.agent_id, 'a1', 'credential.agent_id');
+    near(c.limits.max_amount, 500, 'credential.limits.max_amount');
+    near(c.mandate.max_amount, 500, 'credential.mandate.max_amount');
+    assert(c.mandate.signed, 'credential.mandate.signed must be truthy');
+    near(c.reputation.score, 92, 'credential.reputation.score');
+    assert(typeof r.json.signature === 'string' && r.json.signature.length > 0, 'envelope signature missing');
+    assert(isIso(c.issued_at) && isIso(c.expires_at), 'credential.issued_at/expires_at must be ISO');
+    return `passport shape ok; ${probe}`;
+  });
+
+  await test('T44', 'v2 POST /api/contracts → open contract, policy floor/auto_accept', async () => {
+    const c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+    assert(/^ctr_[0-9a-f]+$/i.test(String(c.id)), `contract.id: expected ctr_<hex>, got ${JSON.stringify(c.id)}`);
+    eq(c.merchant_id, 'm1', 'contract.merchant_id');
+    eq(c.product_id, 'p1', 'contract.product_id');
+    eq(c.product_name, 'Aurora One headphones', 'contract.product_name');
+    near(c.list_price, 249, 'contract.list_price');
+    eq(c.agreed_price, null, 'contract.agreed_price');
+    eq(c.status, 'open', 'contract.status');
+    eq(num(c.rounds), 0, 'contract.rounds');
+    eq(num(c.max_rounds), 4, 'contract.max_rounds');
+    hasKeys(c.policy, ['floor', 'auto_accept', 'max_discount_pct'], 'contract.policy');
+    near(c.policy.floor, 249 * 0.82, 'policy.floor', 1.5);
+    near(c.policy.auto_accept, 249 * 0.95, 'policy.auto_accept', 1.5);
+    assert(num(c.policy.floor) < num(c.policy.auto_accept), 'policy.floor must be below policy.auto_accept');
+    near(c.policy.max_discount_pct, 18, 'policy.max_discount_pct');
+    hasKeys(c.mandate, ['max', 'expires_at'], 'contract.mandate');
+    assert(isIso(c.mandate.expires_at), 'mandate.expires_at must be ISO');
+    assert(num(c.mandate.max) >= 249, `mandate.max must allow the list price, got ${JSON.stringify(c.mandate.max)}`);
+    hasKeys(c.terms, ['delivery_days', 'returns_days', 'warranty_months'], 'contract.terms');
+    assert(Array.isArray(c.transcript) && c.transcript.length === 0, 'transcript must be empty on create');
+    eq(c.hash, null, 'contract.hash');
+    assert(isObj(c.signatures), 'contract.signatures must be an object');
+    assert(isIso(c.created_at), 'contract.created_at must be ISO');
+    return `${c.id} floor ${c.policy.floor} / auto ${c.policy.auto_accept}`;
+  });
+
+  await test('T45', 'v2 POST /api/contracts/:id/auto → accepted, agreed price, hash, signatures', async () => {
+    const c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+    const r = await post(`/api/contracts/${c.id}/auto`, {});
+    eq(r.status, 200, 'auto status');
+    hasKeys(r.json, ['contract'], 'auto response');
+    const d = r.json.contract;
+    eq(d.id, c.id, 'contract.id');
+    eq(d.status, 'accepted', 'contract.status');
+    const agreed = num(d.agreed_price);
+    assert(agreed !== null, `agreed_price must be numeric, got ${JSON.stringify(d.agreed_price)}`);
+    assert(agreed >= num(d.policy.floor) - 0.005, `agreed_price ${agreed} below floor ${d.policy.floor}`);
+    assert(agreed <= num(d.list_price) + 0.005, `agreed_price ${agreed} above list ${d.list_price}`);
+    near(agreed, 249 * 0.95, 'agreed_price (~95% scripted path)', 2.5);
+    assert(typeof d.hash === 'string' && /^[0-9a-f]{64}$/i.test(d.hash), `contract.hash: expected sha256 hex, got ${JSON.stringify(d.hash)}`);
+    assert(isObj(d.signatures) && Object.keys(d.signatures).length >= 2, `signatures: expected >=2 entries, got ${JSON.stringify(d.signatures)}`);
+    const sigText = JSON.stringify(d.signatures);
+    assert(sigText.includes('a1') && sigText.includes('m1'), `signatures must reference buyer agent a1 and merchant m1, got ${sigText.slice(0, 200)}`);
+    assert(Array.isArray(d.transcript) && d.transcript.length >= 2, `transcript: expected >=2 entries, got ${JSON.stringify(d.transcript).slice(0, 200)}`);
+    assert(num(d.rounds) >= 1, 'rounds must have advanced');
+    autoContract = d;
+    return `agreed $${agreed}, hash ${d.hash.slice(0, 12)}…`;
+  });
+
+  await test('T46', 'v2 offers: non-positive price / bad party → 400', async () => {
+    const c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1', mandate: { max: 500, ttl_seconds: 600 } });
+    const zero = await contractOffer(c.id, 'buyer', 0);
+    const d1 = assertErrorShape(zero, 400, 'offer price 0');
+    const neg = await contractOffer(c.id, 'buyer', -5);
+    const d2 = assertErrorShape(neg, 400, 'offer price -5');
+    const badFrom = await contractOffer(c.id, 'nobody', 210);
+    const d3 = assertErrorShape(badFrom, 400, 'offer from invalid party');
+    return `${d1}; ${d2}; ${d3}`;
+  });
+
+  await test('T47', 'v2 offer above mandate → 400/409 error envelope', async () => {
+    let c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1', mandate: { max: 200, ttl_seconds: 600 } });
+    let r = await contractOffer(c.id, 'buyer', 249);
+    let path = 'explicit mandate.max=200';
+    if (r.status === 200) {
+      c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+      r = await contractOffer(c.id, 'buyer', 9999);
+      path = 'offer 9999 above default mandate';
+    }
+    const detail = assertErrorShape(r, [400, 409], 'offer above mandate');
+    const txt = JSON.stringify(r.json).toLowerCase();
+    assert(/mandate|max|limit|price/.test(txt), `error should mention mandate/limit, got ${JSON.stringify(r.json)}`);
+    return `${path}: ${detail}`;
+  });
+
+  await test('T48', 'v2 rounds exceeded → contract expired', async () => {
+    const c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+    const midPrice = Math.round((num(c.policy.floor) + num(c.policy.auto_accept)) / 2);
+    let last = null;
+    let expired = false;
+    for (let i = 0; i < 8; i++) {
+      const r = await contractOffer(c.id, 'buyer', midPrice);
+      assert(r.status === 200, `offer ${i + 1}: expected 200, got ${r.status}`, { body: r.json ?? r.text.slice(0, 400) });
+      last = r.json;
+      if (last.contract.status === 'expired' || last.decision === 'expired') {
+        expired = true;
+        break;
+      }
+      assert(last.decision === 'countered', `offer ${i + 1} at ${midPrice}: expected "countered", got ${JSON.stringify(last.decision)}`, { last });
+    }
+    assert(expired, `contract never expired after 8 offers at ${midPrice}`, { last });
+    const d = await getContract(c.id);
+    eq(d.status, 'expired', 'persisted contract status');
+    assert(num(d.rounds) > num(d.max_rounds), `rounds (${d.rounds}) must exceed max_rounds (${d.max_rounds})`);
+    const after = await contractOffer(c.id, 'buyer', midPrice);
+    const detail = assertErrorShape(after, [409, 400], 'offer on expired contract');
+    return `expired after ${d.rounds} rounds (max ${d.max_rounds}); late offer ${detail}`;
+  });
+
+  await test('T49', 'v2 POST /api/protection/quote m1 $249 → 35bps, $0.87, cap 5000, instant', async () => {
+    const q = await protectionQuote('m1', 249);
+    eq(q.merchant_id, 'm1', 'quote.merchant_id');
+    near(q.amount, 249, 'quote.amount');
+    near(q.fee_bps, 35, 'quote.fee_bps');
+    near(q.fee, 0.87, 'quote.fee');
+    near(q.cap, 5000, 'quote.cap');
+    eq(q.mode, 'instant', 'quote.mode');
+    assert(Array.isArray(q.coverage) && q.coverage.length > 0, `quote.coverage: expected a non-empty array, got ${JSON.stringify(q.coverage).slice(0, 200)}`);
+    if (q.reserve_source !== undefined) eq(q.reserve_source, 'merchant_reserve', 'quote.reserve_source');
+    if (q.exclusions !== undefined) assert(Array.isArray(q.exclusions), 'quote.exclusions must be an array');
+    return `fee $${num(q.fee)} / ${q.fee_bps}bps / cap $${num(q.cap)} / ${q.mode}`;
+  });
+
+  await test('T50', 'v2 order with contract+a1 → amount = agreed_price, ACC hash, agent verified', async () => {
+    assert(autoContract, 'T45 must produce an accepted contract first');
+    const r = await post('/api/merchants/m1/orders', {
+      product_id: 'p1',
+      buyer: { name: 'Sam Rivera', email: 'sam@example.com' },
+      contract_id: autoContract.id,
+      agent_id: 'a1',
+    });
+    assert([200, 201].includes(r.status), `order with contract+agent: expected 200/201, got ${r.status}`, { body: r.json ?? r.text.slice(0, 600) });
+    hasKeys(r.json, ['order', 'payment', 'receipt'], 'order response');
+    const o = r.json.order;
+    near(o.amount, num(autoContract.agreed_price), 'order.amount must equal contract.agreed_price');
+    eq(o.merchant_id, 'm1', 'order.merchant_id');
+    eq(o.product_id, 'p1', 'order.product_id');
+    hasKeys(r.json, ['acc'], 'order response must include acc');
+    hasKeys(r.json.acc, ['contract_id', 'hash', 'transcript_hash', 'terms', 'buyer_agent_id'], 'order.acc');
+    eq(r.json.acc.contract_id, autoContract.id, 'acc.contract_id');
+    assert(typeof r.json.acc.hash === 'string' && /^[0-9a-f]{64}$/i.test(r.json.acc.hash), `acc.hash: expected sha256 hex, got ${JSON.stringify(r.json.acc.hash)}`);
+    assert(typeof r.json.acc.transcript_hash === 'string' && r.json.acc.transcript_hash.length > 0, 'acc.transcript_hash missing');
+    eq(r.json.acc.buyer_agent_id, 'a1', 'acc.buyer_agent_id');
+    eq(o.status, 'paid', 'order.status');
+    accOrder = o;
+    return `${o.id} $${num(o.amount)} acc ${String(r.json.acc.hash).slice(0, 12)}…`;
+  });
+
+  await test('T51', 'v2 order with unverified a3 → 403 AGENT_NOT_VERIFIED', async () => {
+    const r = await post('/api/merchants/m1/orders', {
+      product_id: 'p1',
+      buyer: { name: 'Sam Rivera', email: 'sam@example.com' },
+      agent_id: 'a3',
+    });
+    assertErrorShape(r, 403, 'order with unverified agent');
+    eq(String(r.json.error.code), 'AGENT_NOT_VERIFIED', 'error.code');
+    return '403 AGENT_NOT_VERIFIED';
+  });
+
+  await test('T52', 'v2 regression: order without contract/agent unchanged', async () => {
+    const r = await post('/api/merchants/m1/orders', { product_id: 'p1', buyer: { name: 'Sam Rivera', email: 'sam@example.com' } });
+    assert([200, 201].includes(r.status), `plain order: expected 200/201, got ${r.status}`, { body: r.json ?? r.text.slice(0, 400) });
+    near(r.json.order.amount, 249, 'plain order amount');
+    eq(r.json.order.status, 'paid', 'plain order status');
+    if (r.json.acc !== undefined) assert(r.json.acc === null || isObj(r.json.acc), 'acc must be absent/null on a plain order');
+    return 'plain order: $249, paid';
+  });
+
+  await test('T53', 'v2 claim → refund + paypal_refund_id + sla_ms + actor, reserve decreases', async () => {
+    assert(accOrder, 'T50 must create the ACC order first');
+    const before = (await merchantsById()).by.m1;
+    const r = await claim(accOrder.id, 'not_delivered', true);
+    const c = r.claim;
+    near(c.refund, num(accOrder.amount), 'claim.refund must equal the negotiated order amount');
+    assert(typeof c.paypal_refund_id === 'string' && c.paypal_refund_id.startsWith('SIM-RF-'), `paypal_refund_id: expected "SIM-RF-<hex>", got ${JSON.stringify(c.paypal_refund_id)}`);
+    near(c.sla_ms, 1200, 'claim.sla_ms');
+    eq(c.actor, 'buyer', 'claim.actor default');
+    eq(c.status, 'approved', 'claim.status');
+    near(c.reserve_before, num(before.reserve), 'claim.reserve_before');
+    near(c.reserve_after, num(before.reserve) - num(c.refund), 'claim.reserve_after');
+    eq(r.order.status, 'refunded', 'order.status');
+    eq(r.merchant.tier, 'A', 'merchant.tier stays A');
+    hasKeys(r.merchant, ['id', 'tier', 'score', 'reserve', 'fee_bps', 'cap', 'mode'], 'claim.merchant');
+    claimedId = c.id;
+    return `refund $${num(c.refund)} from ${c.paypal_refund_id} in ${c.sla_ms}ms (${c.actor})`;
+  });
+
+  await test('T54', 'v2 second claim on same order → 409', async () => {
+    const r = await post(`/api/orders/${accOrder.id}/claim`, { reason: 'damaged', evidence: true });
+    return assertErrorShape(r, 409, 'second claim');
+  });
+
+  await test('T55', 'v2 GET /api/claims?merchant=m1 → newest first, includes the claim', async () => {
+    const r = await get('/api/claims?merchant=m1');
+    eq(r.status, 200, 'status');
+    assert(Array.isArray(r.json.claims), 'expected {claims:[...]}');
+    assert(r.json.claims.length >= 1, 'expected at least one claim');
+    const ids = r.json.claims.map((c) => c.id);
+    assert(ids.includes(claimedId), `claims list must include ${claimedId}, got [${ids.join(', ')}]`);
+    const times = r.json.claims.map((c) => Date.parse(c.created_at));
+    assert(times.every((t) => !Number.isNaN(t)), 'every claim needs a parseable created_at');
+    for (let i = 1; i < times.length; i++) {
+      assert(times[i - 1] >= times[i], `claims not sorted newest-first at index ${i}`);
+    }
+    return `${r.json.claims.length} claim(s), head ${ids[0]}`;
+  });
+
+  await test('T56', 'v2 GET /demo.html → 200 with "Run full demo"/"all five"; /demo.js 200', async () => {
+    const html = await get('/demo.html');
+    eq(html.status, 200, 'demo.html status');
+    assert(/html/i.test(html.contentType), `demo.html content-type: expected HTML, got ${html.contentType}`);
+    assert(/run full demo/i.test(html.text), 'demo.html must contain a "Run full demo" marker');
+    assert(/all five/i.test(html.text), 'demo.html must contain the "all five" scorecard marker');
+    assert(/settled/i.test(html.text), 'demo.html must contain the "Settled" brand marker');
+    const js = await get('/demo.js');
+    eq(js.status, 200, 'demo.js status');
+    assert(js.text.length > 200, `demo.js suspiciously short (${js.text.length} bytes)`);
+    assert(js.text.includes('/api'), 'demo.js must call the API');
+    return `demo.html ${html.text.length}B, demo.js ${js.text.length}B`;
+  });
+
+  await test('T57', 'v2 full demo flow steps 1–5 → accepted contract, ACC order, refunded claim', async () => {
+    await reset();
+    // 1. trust credential
+    const detail = await get('/api/merchants/m1');
+    eq(detail.status, 200, 'step 1: merchant detail');
+    assert(detail.json.ledger && detail.json.ledger.credential && detail.json.ledger.signature, 'step 1: signed ledger credential');
+    eq(detail.json.merchant.tier, 'A', 'step 1: tier A');
+    // 2. agent passport
+    const v = await agentVerify({ agent_id: 'a1' });
+    eq(v.verified, true, 'step 2: a1 verified');
+    // 3. negotiate
+    const c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+    const auto = await post(`/api/contracts/${c.id}/auto`, {});
+    eq(auto.status, 200, 'step 3: auto');
+    eq(auto.json.contract.status, 'accepted', 'step 3: contract accepted');
+    const agreed = num(auto.json.contract.agreed_price);
+    // 4. priced protection + PayPal order
+    const q = await protectionQuote('m1', agreed);
+    assert(num(q.fee) > 0 && num(q.cap) > 0, 'step 4: priced protection');
+    const o = await post('/api/merchants/m1/orders', {
+      product_id: 'p1',
+      buyer: { name: 'Demo Buyer', email: 'demo@example.com' },
+      contract_id: c.id,
+      agent_id: 'a1',
+    });
+    assert([200, 201].includes(o.status), `step 4: order expected 200/201, got ${o.status}`, { body: o.json ?? o.text.slice(0, 400) });
+    near(o.json.order.amount, agreed, 'step 4: order amount equals agreed price');
+    assert(o.json.acc && o.json.acc.hash, 'step 4: ACC hash present');
+    // 5. recourse
+    const cl = await claim(o.json.order.id, 'not_delivered', true);
+    near(cl.claim.refund, agreed, 'step 5: refund equals agreed price');
+    assert(String(cl.claim.paypal_refund_id).startsWith('SIM-RF-'), 'step 5: PayPal refund id');
+    eq(cl.order.status, 'refunded', 'step 5: order refunded');
+    const finalContract = await getContract(c.id);
+    eq(finalContract.status, 'accepted', 'final state: contract accepted');
+    return `agreed $${agreed}, refund $${num(cl.claim.refund)}, 5/5 steps green`;
+  });
+
+  await test('T58', 'v2 reset clears contracts + claims, keeps agents', async () => {
+    await reset();
+    const claims = await get('/api/claims?merchant=m1');
+    eq(claims.status, 200, 'claims status');
+    assert(Array.isArray(claims.json.claims) && claims.json.claims.length === 0, `claims after reset: expected [], got ${JSON.stringify(claims.json.claims).slice(0, 200)}`);
+    const c = await get('/api/contracts/ctr_doesnotexist');
+    assertErrorShape(c, 404, 'unknown contract after reset');
+    const agents = await get('/api/agents');
+    eq(agents.status, 200, 'agents still served after reset');
+    eq((agents.json.agents || []).length, 3, 'agents after reset');
+    return 'contracts/claims cleared, 3 agents intact';
+  });
+
+  await test('T59', 'v2 cleanup: final reset leaves seed state', async () => {
+    await reset();
+    const { by } = await merchantsById();
+    near(by.m1.reserve, 12500, 'm1.reserve');
+    eq(by.m1.tier, 'A', 'm1.tier');
+    const claims = await get('/api/claims?merchant=m1');
+    assert(Array.isArray(claims.json.claims) && claims.json.claims.length === 0, 'claims must be empty after cleanup reset');
+    return 'seed restored';
+  });
+
+  // =========================================================================
+  // v3 — AI negotiation + live-PayPal rails (AI-PAYPAL-BUILD-SPEC.md)
+  // =========================================================================
+  await reset();
+  let cfg = null;
+
+  await test('T60', 'v3 GET /api/config → mode, paypal{env,client_id,configured}, ai{enabled,provider,model}', async () => {
+    const r = await get('/api/config');
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['mode', 'ai', 'paypal'], 'config');
+    assert(['sim', 'live'].includes(r.json.mode), `config.mode: expected "sim"|"live", got ${JSON.stringify(r.json.mode)}`);
+    eq(r.json.currency, 'USD', 'config.currency');
+    hasKeys(r.json.paypal, ['env', 'client_id', 'configured'], 'config.paypal');
+    assert(['sandbox', 'live'].includes(r.json.paypal.env), `paypal.env: expected sandbox|live, got ${JSON.stringify(r.json.paypal.env)}`);
+    assert(r.json.paypal.client_id === null || typeof r.json.paypal.client_id === 'string', `paypal.client_id must be string|null, got ${JSON.stringify(r.json.paypal.client_id)}`);
+    assert(typeof r.json.paypal.configured === 'boolean', `paypal.configured must be boolean, got ${JSON.stringify(r.json.paypal.configured)}`);
+    eq(r.json.paypal.configured, Boolean(r.json.paypal.client_id), 'paypal.configured must track client_id presence');
+    hasKeys(r.json.ai, ['enabled', 'provider', 'model'], 'config.ai');
+    assert(typeof r.json.ai.enabled === 'boolean', `ai.enabled must be boolean, got ${JSON.stringify(r.json.ai.enabled)}`);
+    assert(['openai', 'none'].includes(r.json.ai.provider), `ai.provider: expected openai|none, got ${JSON.stringify(r.json.ai.provider)}`);
+    assert(r.json.ai.model === null || typeof r.json.ai.model === 'string', `ai.model must be string|null, got ${JSON.stringify(r.json.ai.model)}`);
+    if (!reused) eq(r.json.ai.enabled, false, 'ai.enabled on a spawned server (test strips AI_API_KEY)');
+    cfg = r.json;
+    return `mode=${r.json.mode}, ai=${r.json.ai.enabled}/${r.json.ai.provider}/${r.json.ai.model}, paypal=${r.json.paypal.env}/configured=${r.json.paypal.configured}`;
+  });
+
+  await test('T61', 'v3 /contracts/:id/ai-auto → accepted, ai.used=false (no key), ≥1 move, hash', async () => {
+    const c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+    const r = await post(`/api/contracts/${c.id}/ai-auto`, {});
+    eq(r.status, 200, 'ai-auto status');
+    hasKeys(r.json, ['contract', 'ai'], 'ai-auto response');
+    const d = r.json.contract;
+    const ai = r.json.ai;
+    eq(d.status, 'accepted', 'contract.status');
+    hasKeys(ai, ['enabled', 'provider', 'model', 'used', 'moves'], 'ai');
+    assert(typeof ai.enabled === 'boolean', `ai.enabled must be boolean, got ${JSON.stringify(ai.enabled)}`);
+    if (!(reused && cfg && cfg.ai.enabled)) eq(ai.used, false, 'ai.used must be false on the deterministic fallback path');
+    assert(Array.isArray(ai.moves) && ai.moves.length >= 1, `ai.moves: expected >=1, got ${JSON.stringify(ai.moves)}`);
+    assert(ai.moves.length <= 2, `ai.moves: spec caps buyer moves at 2, got ${ai.moves.length}`);
+    for (const m of ai.moves) {
+      hasKeys(m, ['round', 'action', 'price'], 'ai move');
+      assert(['offer', 'accept'].includes(m.action), `move.action: expected offer|accept, got ${JSON.stringify(m.action)}`);
+      const mp = num(m.price);
+      assert(mp !== null, `move.price must be numeric, got ${JSON.stringify(m.price)}`);
+      assert(mp >= num(d.policy.floor) - 0.005 && mp <= num(d.list_price) + 0.005, `move.price ${mp} outside [${d.policy.floor}, ${d.list_price}]`);
+    }
+    const agreed = num(d.agreed_price);
+    assert(agreed !== null, `agreed_price must be numeric, got ${JSON.stringify(d.agreed_price)}`);
+    assert(agreed >= num(d.policy.floor) - 0.005, `agreed_price ${agreed} below floor ${d.policy.floor}`);
+    assert(agreed <= num(d.list_price) + 0.005, `agreed_price ${agreed} above list ${d.list_price}`);
+    assert(typeof d.hash === 'string' && /^[0-9a-f]{64}$/i.test(d.hash), `contract.hash: expected sha256 hex, got ${JSON.stringify(d.hash)}`);
+    assert(isObj(d.ai), 'contract.ai must be attached (§2)');
+    // idempotent on an accepted contract (§2)
+    const again = await post(`/api/contracts/${c.id}/ai-auto`, {});
+    eq(again.status, 200, 'second ai-auto status');
+    eq(again.json.contract.status, 'accepted', 'second ai-auto keeps status accepted');
+    near(again.json.contract.agreed_price, agreed, 'second ai-auto agreed_price');
+    return `agreed $${agreed}, used=${ai.used}, ${ai.moves.length} move(s), hash ${d.hash.slice(0, 10)}…`;
+  });
+
+  await test('T62', 'v3 claim use_ai:true → ai.recommendation/confidence/rationale + refund still paid', async () => {
+    const before = (await merchantsById()).by.m1;
+    const o = await createOrder('m1', 'p1');
+    const r = await post(`/api/orders/${o.order.id}/claim`, { reason: 'not_delivered', evidence: true, use_ai: true });
+    eq(r.status, 200, 'claim status');
+    hasKeys(r.json, ['claim', 'order', 'merchant', 'events'], 'claim response');
+    const ai = r.json.ai || (r.json.claim && r.json.claim.ai);
+    assert(isObj(ai), 'claim response must carry ai (top-level ai or claim.ai)');
+    assert(['approve', 'review', 'deny'].includes(ai.recommendation), `ai.recommendation: expected approve|review|deny, got ${JSON.stringify(ai.recommendation)}`);
+    const conf = num(ai.confidence);
+    assert(conf !== null && conf >= 0 && conf <= 1, `ai.confidence: expected 0..1, got ${JSON.stringify(ai.confidence)}`);
+    assert(typeof ai.rationale === 'string' && ai.rationale.trim().length > 0, `ai.rationale must be a non-empty string, got ${JSON.stringify(ai.rationale)}`);
+    assert(typeof ai.used === 'boolean', 'ai.used must be boolean');
+    const c = r.json.claim;
+    near(c.refund, 249, 'claim.refund must still be paid');
+    assert(String(c.paypal_refund_id).startsWith('SIM-RF-'), `paypal_refund_id: expected SIM-RF-…, got ${JSON.stringify(c.paypal_refund_id)}`);
+    near(c.reserve_before, num(before.reserve), 'claim.reserve_before');
+    near(c.reserve_after, num(before.reserve) - num(c.refund), 'claim.reserve_after');
+    eq(r.json.order.status, 'refunded', 'order.status');
+    const second = await post(`/api/orders/${o.order.id}/claim`, { reason: 'damaged', evidence: true, use_ai: true });
+    assertErrorShape(second, 409, 'second claim with use_ai');
+    return `${ai.recommendation} conf=${ai.confidence} used=${ai.used}; refund $${num(c.refund)}`;
+  });
+
+  await test('T63', 'v3 PayPal SIM: create-order SIM-…, capture COMPLETED+capture_id, refund SIM-RF-…', async () => {
+    if (cfg && cfg.mode === 'live') {
+      return 'skipped SIM assertions: server is in live mode (unset PAYPAL_LIVE / E2E_ALLOW_LIVE=0 to test SIM)';
+    }
+    const o = await createOrder('m2', 'p3');
+    const reserve = num((await merchantsById()).by.m2.reserve);
+    const c1 = await post('/api/paypal/create-order', { order_id: o.order.id });
+    eq(c1.status, 200, 'create-order status');
+    hasKeys(c1.json, ['mode', 'paypal_order_id'], 'create-order response');
+    eq(c1.json.mode, 'sim', 'create-order mode');
+    assert(String(c1.json.paypal_order_id).startsWith('SIM-'), `paypal_order_id: expected SIM-…, got ${JSON.stringify(c1.json.paypal_order_id)}`);
+
+    const c2 = await post('/api/paypal/capture', { order_id: o.order.id });
+    eq(c2.status, 200, 'capture status');
+    hasKeys(c2.json, ['mode', 'order'], 'capture response');
+    eq(c2.json.mode, 'sim', 'capture mode');
+    const capStatus = (c2.json.capture && c2.json.capture.status) || c2.json.status;
+    eq(String(capStatus).toUpperCase(), 'COMPLETED', 'capture status');
+    eq(c2.json.order.status, 'paid', 'order.status after capture');
+    assert(c2.json.order.capture_id && String(c2.json.order.capture_id).length > 0, `order.capture_id missing after capture: ${JSON.stringify(c2.json.order.capture_id)}`);
+
+    const c3 = await post('/api/paypal/refund', { order_id: o.order.id });
+    eq(c3.status, 200, 'refund status');
+    hasKeys(c3.json, ['mode', 'refund_id'], 'refund response');
+    eq(c3.json.mode, 'sim', 'refund mode');
+    assert(String(c3.json.refund_id).startsWith('SIM-RF-'), `refund_id: expected SIM-RF-…, got ${JSON.stringify(c3.json.refund_id)}`);
+    if (c3.json.status !== undefined) eq(String(c3.json.status).toUpperCase(), 'COMPLETED', 'refund status');
+    if (c3.json.amount !== undefined) near(c3.json.amount, num(o.order.amount), 'refund amount');
+    near((await merchantsById()).by.m2.reserve, reserve, 'm2.reserve must be unchanged by PayPal routes (§4)');
+    return `${String(c1.json.paypal_order_id).slice(0, 12)}… → capture ${c2.json.order.capture_id} → ${c3.json.refund_id}`;
+  });
+
+  await test('T64', 'v3 order simulate:true → paid immediately, simulated=true, SIM id', async () => {
+    const r = await post('/api/merchants/m1/orders', {
+      product_id: 'p1',
+      buyer: { name: 'Demo Buyer', email: 'demo@example.com' },
+      simulate: true,
+    });
+    assert([200, 201].includes(r.status), `simulate order: expected 200/201, got ${r.status}`, { body: r.json ?? r.text.slice(0, 500) });
+    const o = r.json.order;
+    eq(o.status, 'paid', 'order.status with simulate:true');
+    eq(o.simulated, true, 'order.simulated');
+    assert(String(o.payment_id).startsWith('SIM-'), `payment_id: expected SIM-…, got ${JSON.stringify(o.payment_id)}`);
+    if (r.json.payment && r.json.payment.mode !== undefined) eq(String(r.json.payment.mode).toLowerCase(), 'sim', 'payment.mode');
+    if (!(cfg && cfg.mode === 'live')) {
+      const plain = await post('/api/merchants/m1/orders', { product_id: 'p1', buyer: { name: 'Demo Buyer', email: 'demo@example.com' } });
+      assert([200, 201].includes(plain.status), `plain order: expected 200/201, got ${plain.status}`);
+      eq(plain.json.order.status, 'paid', 'plain order status in SIM mode');
+      eq(plain.json.order.simulated, false, 'plain order.simulated must be false');
+    }
+    return `simulate order ${o.id} paid, simulated=true, ${o.payment_id.slice(0, 12)}…`;
+  });
+
+  await test('T65', 'v3 regression: demo console carries AI + PayPal markers; reset leaves seed', async () => {
+    const html = await get('/demo.html');
+    eq(html.status, 200, 'demo.html status');
+    const js = await get('/demo.js');
+    eq(js.status, 200, 'demo.js status');
+    const combined = `${html.text}\n${js.text}`;
+    assert(/ai agents/i.test(combined), 'demo console must contain the "AI agents" marker');
+    assert(/paypal/i.test(combined), 'demo console must contain a "PayPal" marker');
+    assert(/ai:\s|<model>|fallback/i.test(combined), 'demo console must reference the AI badge (AI: <model> / fallback)');
+    // demo.js goes through the shared `S.api(path)` helper (app.js prefixes API_BASE='/api'),
+    // so accept both the literal path and the helper form.
+    const callsConfig = js.text.includes('/api/config') || /\.api\(\s*['"`]\/config['"`]/.test(js.text);
+    assert(callsConfig, `demo.js must call GET /api/config (literal '/api/config' or S.api('/config')); saw: ${(js.text.match(/[^\n]*config[^\n]*/g) || []).slice(0, 3).join(' | ').slice(0, 300)}`);
+    assert(/ai-auto/.test(js.text), 'demo.js must call /api/contracts/:id/ai-auto');
+    assert(/paypal/i.test(js.text), 'demo.js must use the PayPal routes');
+    await reset();
+    const { by } = await merchantsById();
+    near(by.m1.reserve, 12500, 'm1.reserve after final reset');
+    eq(by.m1.tier, 'A', 'm1.tier after final reset');
+    const claims = await get('/api/claims?merchant=m1');
+    assert(Array.isArray(claims.json.claims) && claims.json.claims.length === 0, 'claims cleared after final reset');
+    return `demo.html ${html.text.length}B + demo.js ${js.text.length}B carry AI/PayPal markers; seed restored`;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Run
+// ---------------------------------------------------------------------------
+
+(async () => {
+  let fatal = null;
+  try {
+    await main();
+  } catch (e) {
+    fatal = e;
+    print('');
+    print(`FATAL ${e.message}`);
+    if (e.evidence) print(`      evidence: ${JSON.stringify(e.evidence).slice(0, 1500)}`);
+  } finally {
+    await stopServer().catch(() => {});
+    const passed = results.filter((r) => r.ok).length;
+    const failed = results.filter((r) => !r.ok);
+    print('');
+    print('------------------------------------------------------------');
+    print(`RESULT: ${passed}/${results.length} passed, ${failed.length} failed${skipped.length ? `, ${skipped.length} skipped` : ''}${fatal ? ' (+1 fatal)' : ''}`);
+    if (failed.length) {
+      print('Failed:');
+      for (const f of failed) print(`  - ${f.id} ${f.name}: ${f.err.message}`);
+    }
+    print(`Server: ${reused ? 'reused (left running)' : child && child.pid ? 'spawned (terminated)' : 'none'}`);
+    print('');
+    process.exitCode = failed.length || fatal ? 1 : 0;
+    // Hard exit guard in case a socket/promise keeps the loop alive.
+    setTimeout(() => process.exit(process.exitCode || 0), 250).unref();
+  }
+})();

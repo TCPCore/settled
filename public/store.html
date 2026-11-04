@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settled — protected storefront</title>
+<meta name="description" content="Buy with protection: signed merchant trust, $0 buyer fee and instant refunds settled from the seller reserve.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="store">
+<div class="bg" aria-hidden="true"></div>
+
+<header class="topnav">
+  <div class="topnav-in">
+    <a class="brand" href="index.html" aria-label="Settled home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.4 20.4 7v10L12 21.6 3.6 17V7L12 2.4Z" fill="#2BD9A0" fill-opacity=".16" stroke="#2BD9A0" stroke-width="1.3"/><path d="m8.3 12.2 2.4 2.4 5-5.2" stroke="#2BD9A0" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="brand-copy"><b>Settled</b><small>trust settlement</small></span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html" data-nav="dashboard">Dashboard</a>
+      <a href="store.html" data-nav="store">Storefront</a>
+      <a href="agent.html" data-nav="agent">Agent console</a>
+      <a href="demo.html" data-nav="demo">Demo</a>
+    </nav>
+    <div class="nav-side">
+      <span class="env-pill" id="envPill"><span class="dot"></span><span id="envLabel">SIM</span></span>
+      <span class="nav-merchant" id="navMerchant" hidden><span id="navMerchantName">—</span><i class="tier tier-c" id="navMerchantTier">?</i></span>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <div id="apiError" class="panel api-error" hidden></div>
+
+  <div id="storeBody">
+    <div class="store-head">
+      <div class="store-brand">
+        <div class="store-mark" id="storeMark">—</div>
+        <div style="min-width:0">
+          <div class="eyebrow">Settled-protected storefront</div>
+          <h1 class="store-name" id="storeName">Loading merchant…</h1>
+          <div class="store-domain" id="storeDomain">—</div>
+        </div>
+      </div>
+      <div class="store-links">
+        <select class="select" id="merchantSelect" aria-label="Switch merchant" style="width:210px"></select>
+        <a class="btn btn-ghost btn-sm" data-link="index.html" href="index.html">Dashboard</a>
+        <a class="btn btn-ghost btn-sm" data-link="agent.html" href="agent.html">Agent console</a>
+      </div>
+    </div>
+
+    <div class="store-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <div style="min-width:0">
+            <div class="panel-title">Featured product</div>
+            <div class="panel-sub" id="productPanelSub">Merchant inventory · prices in USD</div>
+          </div>
+          <span class="badge emerald" id="productBadge">protected</span>
+        </div>
+        <div class="product" id="productBody">
+          <div class="skeleton" style="min-height:280px;border-radius:13px"></div>
+          <div style="display:flex;flex-direction:column;gap:10px;padding-top:6px">
+            <div class="skeleton sk-line" style="width:30%"></div>
+            <div class="skeleton sk-title" style="width:70%;height:24px"></div>
+            <div class="skeleton sk-line" style="width:90%;margin-top:4px"></div>
+            <div class="skeleton sk-line" style="width:80%"></div>
+            <div class="skeleton sk-line" style="width:60%;margin-top:18px"></div>
+          </div>
+        </div>
+      </section>
+
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <section class="panel trust-panel" id="trustPanel" aria-live="polite">
+          <div class="trust-top">
+            <div class="trust-score"><div class="dial" style="width:108px;height:108px"><span class="skeleton" style="width:108px;height:108px;border-radius:50%;display:block"></span></div></div>
+            <div class="trust-headline">
+              <div class="skeleton sk-line" style="width:70%"></div>
+              <div class="skeleton sk-line" style="width:52%;margin-top:9px"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel recent-order hidden" id="recentOrderPanel" aria-live="polite"></section>
+
+        <section class="panel">
+          <div class="panel-head compact">
+            <div class="panel-title">How protection settles</div>
+            <span class="badge">3 steps</span>
+          </div>
+          <div class="panel-body" style="padding:14px 18px;display:flex;flex-direction:column;gap:12px">
+            <div class="protect-note" style="margin:0;border-color:var(--line);background:rgba(9,16,29,.5)">
+              <span style="color:var(--emerald)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v6c0 4.6 3 7.6 7 9 4-1.4 7-4.4 7-9V6l-7-3Z"/><polyline points="9 12 11.2 14.2 15.4 10"/></svg></span>
+              <div><div class="pn-title" style="color:var(--ink-2)">The merchant pays the fee</div><div class="pn-sub" style="color:var(--muted-2)">Protection is priced from the signed ledger — the buyer pays $0.00 extra.</div></div>
+            </div>
+            <div class="protect-note" style="margin:0;border-color:var(--line);background:rgba(9,16,29,.5)">
+              <span style="color:var(--gold)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+              <div><div class="pn-title" style="color:var(--ink-2)">Refunds settle instantly</div><div class="pn-sub" style="color:var(--muted-2)">A valid claim is paid from the reserve and hits the buyer in about 1.2 seconds.</div></div>
+            </div>
+            <div class="protect-note" style="margin:0;border-color:var(--line);background:rgba(9,16,29,.5)">
+              <span style="color:var(--blue)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2V5Z"/><path d="M8 7h7M8 11h7"/></svg></span>
+              <div><div class="pn-title" style="color:var(--ink-2)">Reputation is portable</div><div class="pn-sub" style="color:var(--muted-2)">The receipt carries a credential hash that any agent can verify later.</div></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span><b>Settled</b> · trust settlement prototype · simulated PayPal-style payments</span>
+      <span class="foot-links"><a href="index.html">Merchant dashboard</a><a href="agent.html">Agent console</a><a href="store.html">Storefront</a></span>
+    </footer>
+  </div>
+</main>
+
+<div class="toast-host" id="toastHost" aria-live="polite"></div>
+<noscript><div class="panel" style="margin:20px;padding:18px">Settled needs JavaScript enabled.</div></noscript>
+
+<script src="app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var S = window.Settled;
+  var state = {
+    merchantId: null,
+    merchants: [],
+    merchant: null,
+    ledger: null,
+    events: [],
+    products: [],
+    productId: null,
+    order: null,
+    receipt: null,
+    health: null
+  };
+
+  var el = {
+    apiError: document.getElementById('apiError'),
+    body: document.getElementById('storeBody'),
+    mark: document.getElementById('storeMark'),
+    name: document.getElementById('storeName'),
+    domain: document.getElementById('storeDomain'),
+    merchantSelect: document.getElementById('merchantSelect'),
+    productPanelSub: document.getElementById('productPanelSub'),
+    productBadge: document.getElementById('productBadge'),
+    productBody: document.getElementById('productBody'),
+    trustPanel: document.getElementById('trustPanel'),
+    recentPanel: document.getElementById('recentOrderPanel')
+  };
+
+  S.mountNav('store');
+
+  function initials(name) {
+    var p = String(name || '').trim().split(/\s+/);
+    return ((p[0] || '')[0] || '') + ((p[1] || '')[0] || '');
+  }
+  function currentProduct() {
+    return state.products.filter(function (p) { return p.id === state.productId; })[0] || state.products[0] || null;
+  }
+  function tierBadge(tier) {
+    var t = S.tierInfo(tier);
+    return '<span class="tier ' + t.cls + '">' + S.esc(tier || '?') + '</span>';
+  }
+  function modeBadge(mode) {
+    var m = S.modeInfo(mode);
+    return '<span class="mode ' + m.cls + '">' + S.esc(m.short) + '</span>';
+  }
+  function metric(key) {
+    return S.metric(state.merchant, state.ledger, key);
+  }
+
+  function renderHead() {
+    var m = state.merchant;
+    el.mark.textContent = initials(m.name);
+    el.name.textContent = m.name || 'Storefront';
+    el.domain.innerHTML = '<span class="mono">' + S.esc(m.domain || '') + '</span> · ' + S.esc(m.category || 'Store');
+    el.merchantSelect.innerHTML = state.merchants.map(function (x) {
+      return '<option value="' + S.esc(x.id) + '"' + (x.id === state.merchantId ? ' selected' : '') + '>' + S.esc(x.name) + ' · ' + S.esc(x.tier || '?') + '</option>';
+    }).join('');
+    S.setNavMerchant(m);
+  }
+
+  function renderTrust() {
+    var m = state.merchant;
+    var t = S.tierInfo(m.tier);
+    var delivered = metric('delivered_pct');
+    var described = metric('as_described_pct');
+    var dispute = metric('dispute_rate_pct');
+    el.trustPanel.innerHTML =
+      '<div class="trust-top">' +
+        '<div class="trust-score">' + S.ring(m.score, m.tier, 108) + '</div>' +
+        '<div class="trust-headline">' +
+          '<div class="trust-title">' + S.esc(m.name) + ' ' + tierBadge(m.tier) + '</div>' +
+          '<div class="trust-sub">Signed ledger verified · ' + S.esc(t.desc) + ' reputation · ' + S.esc(m.category || 'merchant') + '</div>' +
+          '<div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">' + modeBadge(m.mode) + '<span class="badge emerald">' + S.icon('shield') + ' buyer protected</span></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="trust-metrics">' +
+        '<div class="trust-metric"><div class="tm-label">' + S.icon('truck') + ' Delivered on time</div><div class="tm-value">' + S.esc(S.pct(delivered)) + '</div></div>' +
+        '<div class="trust-metric"><div class="tm-label">' + S.icon('package') + ' As described</div><div class="tm-value">' + S.esc(S.pct(described)) + '</div></div>' +
+        '<div class="trust-metric"><div class="tm-label">' + S.icon('shield') + ' Protected up to</div><div class="tm-value">' + S.esc(S.money(m.cap)) + '</div></div>' +
+        '<div class="trust-metric"><div class="tm-label">' + S.icon('flag') + ' Dispute rate</div><div class="tm-value">' + S.esc(S.pct(dispute)) + '</div></div>' +
+      '</div>' +
+      '<div class="trust-foot">' +
+        '<a class="ledger-link" data-link="index.html" href="index.html">View signed ledger ' + S.icon('arrowRight') + '</a>' +
+        '<span class="badge emerald">' + S.icon('check') + ' credential valid</span>' +
+      '</div>';
+    S.setMerchantLinks(state.merchantId);
+  }
+
+  function renderProduct() {
+    var m = state.merchant;
+    var product = currentProduct();
+    if (!product) {
+      el.productBadge.textContent = 'no products';
+      el.productBody.innerHTML = S.emptyState('No products available', 'This merchant has no inventory in the seed data. Try another merchant.');
+      return;
+    }
+    var blocked = m.mode === 'blocked';
+    var art = S.productArt(product, m.category);
+    var desc = S.productDescription(product, m.category);
+    var options = state.products.map(function (p) {
+      return '<button class="product-opt' + (p.id === product.id ? ' is-active' : '') + '" type="button" data-product="' + S.esc(p.id) + '">' +
+        '<span class="po-name">' + S.esc(p.name || 'Product') + '</span>' +
+        '<span class="po-price">' + S.esc(S.money(p.price)) + '</span>' +
+      '</button>';
+    }).join('');
+    el.productPanelSub.textContent = 'Merchant inventory · ' + state.products.length + ' product' + (state.products.length === 1 ? '' : 's') + ' · prices in USD';
+    el.productBadge.innerHTML = blocked ? '<span class="badge danger">blocked</span>' : S.icon('shieldCheck') + ' protected';
+    el.productBody.innerHTML =
+      '<div class="product-art">' +
+        '<div class="art-badge"><span class="badge emerald">' + S.icon('shield') + ' protected</span><span class="badge">signed ledger</span></div>' +
+        art +
+        '<div class="art-foot">settled · protected checkout</div>' +
+      '</div>' +
+      '<div class="product-info">' +
+        '<div class="product-cat">' + S.esc(m.name) + ' · ' + S.esc(m.category || 'store') + '</div>' +
+        '<h2 class="product-name">' + S.esc(product.name || 'Product') + '</h2>' +
+        '<p class="product-desc">' + S.esc(desc) + '</p>' +
+        '<div class="product-switch">' + options + '</div>' +
+        '<div class="product-buy">' +
+          '<div class="price-block">' +
+            '<div class="plabel">Price</div>' +
+            '<div class="pvalue" id="productPrice">' + S.esc(S.money(product.price)) + '</div>' +
+            '<div class="pnote">Protection fee paid by merchant · buyer pays $0.00</div>' +
+          '</div>' +
+          '<div class="buy-cta">' +
+            '<button class="btn btn-primary" id="buyBtn" type="button"' + (blocked ? ' disabled' : '') + '>' + S.icon('shieldCheck') + (blocked ? 'Merchant blocked' : 'Buy with protection') + '</button>' +
+            '<div class="buy-note">' + (blocked ? 'This merchant is blocked from instant settlement.' : 'Instant refund if it goes wrong') + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    Array.prototype.forEach.call(el.productBody.querySelectorAll('[data-product]'), function (btn) {
+      btn.addEventListener('click', function () {
+        state.productId = btn.getAttribute('data-product');
+        renderProduct();
+      });
+    });
+    var buy = el.productBody.querySelector('#buyBtn');
+    if (buy && !blocked) buy.addEventListener('click', openCheckout);
+  }
+
+  function renderRecent() {
+    var order = state.order;
+    if (!order || order.merchant_id !== state.merchantId) {
+      el.recentPanel.classList.add('hidden');
+      el.recentPanel.innerHTML = '';
+      return;
+    }
+    var st = S.statusInfo(order.status);
+    var product = state.products.filter(function (p) { return p.id === order.product_id; })[0] || currentProduct();
+    var canDeliver = order.status === 'paid';
+    var canClaim = order.status === 'paid' || order.status === 'delivered';
+    var actions = '';
+    if (canDeliver) actions += '<button class="btn btn-ghost btn-sm" type="button" data-action="deliver">' + S.icon('truck') + 'Simulate delivery</button>';
+    if (canClaim) actions += '<button class="btn btn-ghost btn-sm" type="button" data-action="claim">' + S.icon('flag') + 'Report a problem</button>';
+    if (!actions) actions = '<span class="tiny muted">This order is settled — no further actions.</span>';
+    var note = order.status === 'refunded'
+      ? 'Refunded from the seller reserve. The merchant’s tier and reserve were updated.'
+      : order.status === 'delivered'
+        ? 'Delivered · the protection window is still open.'
+        : 'Payment captured · protection is active until delivery is confirmed.';
+    el.recentPanel.classList.remove('hidden');
+    el.recentPanel.innerHTML =
+      '<div class="panel-head compact">' +
+        '<div class="panel-title">Your protected order</div>' +
+        '<span class="status ' + st.cls + '" data-recent-status>' + S.esc(st.label) + '</span>' +
+      '</div>' +
+      '<div class="order-card">' +
+        '<div class="order-summary">' +
+          '<div class="order-thumb">' + S.productArt(product || { name: order.product_name }, state.merchant.category) + '</div>' +
+          '<div class="order-main">' +
+            '<div class="order-title">' + S.esc(order.product_name || 'Order') + '</div>' +
+            '<div class="order-id">' + S.esc(order.id) + ' · ' + S.esc(S.money(order.amount)) + ' · fee ' + S.esc(S.money(order.fee)) + '</div>' +
+            '<div class="order-status-note">' + S.esc(note) + '</div>' +
+          '</div>' +
+          '<div class="order-side">' +
+            '<span class="badge">' + S.icon('shield') + ' ' + S.esc(S.money((order.protection && order.protection.cap) || state.merchant.cap)) + ' covered</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="order-actions-row"><span class="spacer"></span>' + actions + '</div>' +
+      '</div>';
+    var deliver = el.recentPanel.querySelector('[data-action="deliver"]');
+    if (deliver) deliver.addEventListener('click', function () { doDeliver(order, deliver); });
+    var claim = el.recentPanel.querySelector('[data-action="claim"]');
+    if (claim) claim.addEventListener('click', openClaim);
+  }
+
+  function openClaim() {
+    if (!state.order) return;
+    var order = state.order;
+    S.claimDialog({
+      merchant: state.merchant,
+      order: order,
+      onComplete: function (res) {
+        state.order = (res && res.order) || state.order;
+        if (res && res.merchant) state.merchant = Object.assign({}, state.merchant, res.merchant);
+        renderTrust();
+        renderRecent();
+        S.toast('Refund settled · ' + S.money(res && res.claim && res.claim.refund) + ' returned to the buyer.', 'ok');
+        loadMerchant(state.merchantId, true);
+      }
+    });
+  }
+
+  function doDeliver(order, btn, after) {
+    S.setBusy(btn, true, 'Delivering…');
+    S.fulfill(order).then(function (res) {
+      state.order = (res && res.order) || order;
+      S.toast('Delivery simulated · order marked ' + ((res && res.order && res.order.status) || 'delivered') + '.', 'ok');
+      renderRecent();
+      if (after) after();
+    }).catch(function (err) {
+      S.setBusy(btn, false);
+      S.toast((err && err.message) || 'Delivery failed.', 'err');
+    });
+  }
+
+  function openCheckout() {
+    var m = state.merchant;
+    var product = currentProduct();
+    if (!m || !product) return;
+    if (m.mode === 'blocked') {
+      S.toast('This merchant is blocked from instant settlement.', 'warn');
+      return;
+    }
+    var fee = Math.round((Number(product.price) || 0) * (Number(m.fee_bps) || 0) / 10000 * 100) / 100;
+    var cap = Number(m.cap) || 0;
+    var modal = S.modal({
+      title: 'Protected checkout',
+      sub: m.name + ' · signed ledger verified at purchase',
+      body:
+        '<div class="checkout-line">' +
+          '<div class="order-thumb">' + S.productArt(product, m.category) + '</div>' +
+          '<div class="cl-main"><div class="cl-name">' + S.esc(product.name) + '</div><div class="cl-sub">1 × item · ships from ' + S.esc(m.domain || m.name) + '</div></div>' +
+          '<div class="cl-price">' + S.esc(S.money(product.price)) + '</div>' +
+        '</div>' +
+        '<div class="fee-breakdown">' +
+          '<div class="fee-row"><span>Item</span><b>' + S.esc(S.money(product.price)) + '</b></div>' +
+          '<div class="fee-row"><span>Buyer protection <span class="dim">included · merchant pays the fee</span></span><b>$0.00</b></div>' +
+          '<div class="fee-row"><span>Merchant fee <span class="dim">' + S.esc(S.money(fee)) + ' · ' + S.esc(m.fee_bps) + ' bps · paid by ' + S.esc(m.name) + '</span></span><b>' + S.esc(S.money(fee)) + '</b></div>' +
+          '<div class="fee-row total"><span>You pay</span><b>' + S.esc(S.money(product.price)) + '</b></div>' +
+        '</div>' +
+        '<div class="protect-note">' + S.icon('shieldCheck') +
+          '<div><div class="pn-title">Protected up to ' + S.esc(S.money(cap)) + ' · ' + S.esc(S.modeInfo(m.mode).short) + ' settlement</div>' +
+          '<div class="pn-sub">If it never arrives, arrives damaged, or is not as described, a claim refunds you from the merchant’s reserve in about 1.2 seconds.</div></div>' +
+        '</div>' +
+        '<div class="form-grid" style="margin-top:15px">' +
+          '<div class="field"><label class="field-label" for="buyerName">Your name</label><input class="input" id="buyerName" value="Sam Rivera" autocomplete="name"></div>' +
+          '<div class="field"><label class="field-label" for="buyerEmail">Email</label><input class="input" id="buyerEmail" value="sam@example.com" autocomplete="email"></div>' +
+        '</div>' +
+        '<div id="checkoutError" class="field-error" style="margin-top:8px" hidden></div>' +
+        '<button class="sim-pay-btn" id="payBtn" type="button">' +
+          '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true"><path d="M7 4h5.2c2.9 0 4.8 1.8 4.8 4.5 0 2.9-2 4.7-5 4.7H9.8L9.2 18H5.7L7 4Z" fill="#0B2A54"/><path d="M12.4 8h4.9c2.7 0 4.5 1.7 4.5 4.3 0 2.7-1.9 4.4-4.7 4.4h-2.5L14 21h-3.4L12.4 8Z" fill="#0B2A54" fill-opacity=".55"/></svg>' +
+          '<span id="payLabel">Pay ' + S.esc(S.money(product.price)) + ' with protection</span>' +
+        '</button>' +
+        '<div class="pay-caption">Simulated PayPal-style payment · no funds move</div>',
+      foot: '<span class="note">Buyer fee $0.00 · merchant covers ' + S.esc(m.fee_bps) + ' bps</span><span class="spacer"></span><button class="btn btn-ghost" type="button" data-cancel>Cancel</button>'
+    });
+    var cancel = modal.foot.querySelector('[data-cancel]');
+    if (cancel) cancel.addEventListener('click', modal.close);
+    var payBtn = modal.body.querySelector('#payBtn');
+    var errEl = modal.body.querySelector('#checkoutError');
+    var nameEl = modal.body.querySelector('#buyerName');
+    var emailEl = modal.body.querySelector('#buyerEmail');
+    payBtn.addEventListener('click', function () {
+      var name = (nameEl.value || '').trim();
+      var email = (emailEl.value || '').trim();
+      if (!name) { errEl.hidden = false; errEl.textContent = 'Enter the buyer name.'; nameEl.focus(); return; }
+      if (!email || email.indexOf('@') < 1) { errEl.hidden = false; errEl.textContent = 'Enter a valid email address.'; emailEl.focus(); return; }
+      errEl.hidden = true;
+      S.setBusy(payBtn, true, 'Creating protected order…');
+      S.api('/merchants/' + encodeURIComponent(m.id) + '/orders', {
+        method: 'POST',
+        body: { product_id: product.id, buyer: { name: name, email: email } }
+      }).then(function (res) {
+        state.order = res.order;
+        state.receipt = res.receipt || {};
+        renderReceipt(modal, res, product);
+        renderRecent();
+      }).catch(function (err) {
+        S.setBusy(payBtn, false);
+        errEl.hidden = false;
+        errEl.textContent = (err && err.message) || 'Checkout failed.';
+        S.toast((err && err.message) || 'Checkout failed.', 'err');
+      });
+    });
+  }
+
+  function renderReceipt(modal, res, product) {
+    var order = res.order || {};
+    var receipt = res.receipt || {};
+    var payment = res.payment || {};
+    var cap = (order.protection && order.protection.cap) || state.merchant.cap;
+    modal.setTitle('Payment protected');
+    modal.setSub(((order.product_name) || product.name) + ' · ' + S.money(order.amount));
+    modal.setBody(
+      '<div class="success-hero">' +
+        '<div class="success-ring">' + S.icon('check') + '</div>' +
+        '<div class="success-title">Order protected</div>' +
+        '<div class="success-sub">Payment captured, credential sealed and protection attached to the order.</div>' +
+      '</div>' +
+      '<div class="receipt-grid">' +
+        '<div class="receipt-cell"><div class="receipt-label">Order</div><div class="receipt-value">' + S.esc(receipt.order_id || order.id || '—') + '</div></div>' +
+        '<div class="receipt-cell"><div class="receipt-label">Paid</div><div class="receipt-value money">' + S.esc(S.money(receipt.paid !== undefined ? receipt.paid : order.amount)) + '</div></div>' +
+        '<div class="receipt-cell"><div class="receipt-label">Payment id</div><div class="receipt-value">' + S.esc((payment && payment.id) || order.payment_id || '—') + '</div></div>' +
+        '<div class="receipt-cell"><div class="receipt-label">Captured</div><div class="receipt-value">' + S.esc(S.dateFmt(receipt.captured_at)) + '</div></div>' +
+        '<div class="receipt-cell" style="grid-column:1/-1"><div class="receipt-label">Credential hash</div><div class="receipt-value">' + S.esc(receipt.credential_hash || '—') + '</div></div>' +
+      '</div>' +
+      '<div class="protect-note" style="margin-top:13px">' + S.icon('shieldCheck') +
+        '<div><div class="pn-title">Protected up to ' + S.esc(S.money(cap)) + ' · ' + S.esc(S.modeInfo(state.merchant.mode).short) + '</div>' +
+        '<div class="pn-sub">Keep this receipt. The credential hash proves the trust data attached to this purchase.</div></div>' +
+      '</div>' +
+      '<div class="order-actions-row" id="receiptActions">' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-action="deliver">' + S.icon('truck') + 'Simulate delivery</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-action="claim">' + S.icon('flag') + 'Report a problem</button>' +
+        '<span class="spacer"></span><span class="tiny muted" data-receipt-status>payment captured</span>' +
+      '</div>'
+    );
+    modal.setFoot('<button class="btn btn-primary" type="button" data-done>Done · view my order</button>');
+    modal.foot.querySelector('[data-done]').addEventListener('click', function () {
+      modal.close();
+      if (el.recentPanel) el.recentPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    var actions = modal.body.querySelector('#receiptActions');
+    var statusNote = actions.querySelector('[data-receipt-status]');
+    var deliver = actions.querySelector('[data-action="deliver"]');
+    var claim = actions.querySelector('[data-action="claim"]');
+    deliver.addEventListener('click', function () {
+      S.setBusy(deliver, true, 'Delivering…');
+      S.fulfill(order).then(function (r) {
+        state.order = (r && r.order) || state.order;
+        renderRecent();
+        S.setBusy(deliver, false);
+        deliver.disabled = true;
+        deliver.innerHTML = S.icon('check') + 'Delivered';
+        if (statusNote) statusNote.textContent = 'delivery confirmed';
+        S.toast('Delivery simulated · protection stays open.', 'ok');
+      }).catch(function (err) {
+        S.setBusy(deliver, false);
+        S.toast((err && err.message) || 'Delivery failed.', 'err');
+      });
+    });
+    claim.addEventListener('click', function () {
+      modal.close();
+      openClaim();
+    });
+    S.toast('Order created · ' + S.money(order.amount) + ' protected.', 'ok');
+  }
+
+  function loadMerchant(id, silent) {
+    return S.api('/merchants/' + encodeURIComponent(id)).then(function (detail) {
+      var m = detail.merchant || detail;
+      if (!Array.isArray(m.products) || !m.products.length) {
+        var listed = state.merchants.filter(function (x) { return x.id === (m.id || id); })[0];
+        if (listed && Array.isArray(listed.products)) m.products = listed.products;
+      }
+      state.merchant = m;
+      state.ledger = detail.ledger || null;
+      state.events = S.eventsOf(detail);
+      state.products = S.productsOf(m);
+      var keep = state.productId && state.products.some(function (p) { return p.id === state.productId; });
+      if (!keep) state.productId = state.products[0] ? state.products[0].id : null;
+      state.merchantId = m.id || id;
+      renderHead();
+      renderTrust();
+      renderProduct();
+      renderRecent();
+      S.setNavMerchant(m);
+      S.setMerchantLinks(state.merchantId);
+    }).catch(function (err) {
+      if (!silent) showError(err);
+      else S.toast((err && err.message) || 'Could not refresh merchant.', 'err');
+    });
+  }
+
+  function showError(err) {
+    S.showApiError(el.apiError, err, function () { loadAll(); });
+    el.body.hidden = true;
+    S.toast((err && err.message) || 'Could not load storefront.', 'err');
+  }
+
+  function loadAll() {
+    el.body.hidden = false;
+    el.apiError.hidden = true;
+    Promise.all([S.api('/health'), S.api('/merchants')]).then(function (results) {
+      state.health = results[0] || {};
+      state.merchants = (results[1] && results[1].merchants) || [];
+      S.setEnv(state.health.mode);
+      var wanted = S.qs('merchant');
+      var exists = state.merchants.some(function (m) { return m.id === wanted; });
+      var id = exists ? wanted : (state.merchants[0] && state.merchants[0].id);
+      if (!id) throw new Error('No merchants were seeded by the API.');
+      state.merchantId = id;
+      S.setQuery('merchant', id);
+      S.setMerchantLinks(id);
+      S.setNavMerchant(state.merchants.filter(function (m) { return m.id === id; })[0]);
+      return loadMerchant(id);
+    }).catch(function (err) {
+      showError(err);
+    });
+  }
+
+  el.merchantSelect.addEventListener('change', function () {
+    var id = el.merchantSelect.value;
+    if (!id || id === state.merchantId) return;
+    state.merchantId = id;
+    state.productId = null;
+    state.order = null;
+    S.setQuery('merchant', id);
+    S.setMerchantLinks(id);
+    loadMerchant(id);
+  });
+
+  loadAll();
+})();
+</script>
+</body>
+</html>

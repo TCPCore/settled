@@ -1,0 +1,24 @@
+# Dependencies (this project has none — Node built-ins only)
+node_modules/
+
+# Local secrets — never commit. .env.example is the tracked template.
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+.vscode/
+.idea/
+
+# Logs and test artifacts
+*.log
+npm-debug.log*
+coverage/
+tmp/
+
+# Screenshots are intentionally tracked: screenshots/*.png are part of the
+# README and the Devpost submission.
+
+# Scratch/headless renders dropped into public/ during validation
+public/_*.html

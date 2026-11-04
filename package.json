@@ -1,0 +1,11 @@
+{
+  "name": "settled",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Settled — reputation settles with the payment. A working Trust Settlement prototype.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/e2e.js"
+  },
+  "engines": { "node": ">=20" }
+}
