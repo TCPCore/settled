@@ -5,7 +5,7 @@
 A PayPal-native assurance layer for commerce and AI agents: a signed, portable merchant trust credential, protection priced per order against a hard cap, and a claim paid from the merchant's reserve in about a second — with an AI buyer agent negotiating inside a signed mandate.
 
 > **Links (fill before submitting)**
-> - Repo: `REPO_URL_HERE` (MIT — see [LICENSE](LICENSE))
+> - Repo: https://github.com/TCPCore/settled (MIT — see [LICENSE](LICENSE))
 > - Demo video (<3 min, YouTube): `VIDEO_URL_HERE`
 > - Run it locally: `node server.js` → `http://127.0.0.1:4173/demo.html`
 > - Long-form write-up: [WRITEUP.md](WRITEUP.md) · judge brief: [JUDGE-BRIEF.md](JUDGE-BRIEF.md)
