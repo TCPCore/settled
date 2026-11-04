@@ -79,6 +79,12 @@ The server then creates real sandbox Orders and the demo shows an **Open PayPal 
 
 **Reset before the demo:** `curl -X POST http://127.0.0.1:4173/api/reset` (or click Reset in the UI).
 
+## Final review, integration and hosting
+
+- **[FINAL-REVIEW.md](FINAL-REVIEW.md)** — the full pre-submission review: how PayPal integrates Settled (merchant app, PSP/platform, consumer-AI API), the transaction sequence, what judges vet, the 4-minute pitch, hosting and the privacy plan.
+- **[DEPLOY.md](DEPLOY.md)** — Render Blueprint (`render.yaml`) and Docker instructions for a private demo URL.
+- **[AGENT-CHAT-SPEC.md](AGENT-CHAT-SPEC.md)** — the transparent agent-to-agent negotiation interface.
+
 ## Hackathon submission (PayPal AI Hackathon 2026)
 
 The repo is the submission: working prototype + MIT license + Devpost text + a <3:00 video. The **build spec** (frozen AI negotiation + PayPal sandbox interfaces) and the **submission plan** (rules, deadline **Nov 12, 2026, 2:00 PM PT**, checklist) are linked in the table below.

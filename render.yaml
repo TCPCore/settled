@@ -1,0 +1,18 @@
+# Render Blueprint — one-click demo deploy from the public repo.
+# Public demo runs in SIM (no keys, no money). Add PayPal/AI env vars only
+# in a private service after you have tested them.
+services:
+  - type: web
+    name: settled-demo
+    runtime: node
+    plan: free
+    buildCommand: "npm install --omit=dev"
+    startCommand: "node server.js"
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PAYPAL_LIVE
+        value: "0"
+      - key: AI_PROVIDER
+        value: none
