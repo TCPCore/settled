@@ -112,7 +112,9 @@ set -a; . ./.env; set +a    # bash/zsh: export everything in .env
 node server.js
 ```
 
-- **AI** — `AI_PROVIDER=openai` + `AI_API_KEY` (`AI_MODEL`, `AI_BASE_URL`, `AI_TIMEOUT_MS` optional). Turns on the model-generated negotiation transcript and the claim explainer. No key or an API error → deterministic fallback (`ai.used:false`), same accepted price.
+- **AI** — `AI_PROVIDER=openai` + `AI_API_KEY` + `AI_BASE_URL` + `AI_MODEL`. Turns on the model-generated negotiation transcript and the claim explainer. No key or an API error → deterministic fallback (`ai.used:false`), same accepted price.
+  - **Fast live path (used in the verified run):** Ollama Cloud — `AI_BASE_URL=https://ollama.com/v1`, `AI_MODEL=gpt-oss:20b`, `AI_API_KEY=<ollama key>`. Step 3 is one model call, ~3–4 s.
+  - **Local Ollama:** `AI_BASE_URL=http://127.0.0.1:11434/v1`, `AI_MODEL=llama3.2:3b` (or `:1b`). On a CPU-only laptop the first call can take 10–20 s; warm it (`ollama run llama3.2:3b "ok"`) and set `AI_TIMEOUT_MS=30000`. The UI now shows a live elapsed timer while waiting.
 - **PayPal sandbox** — `PAYPAL_LIVE=1` + `PAYPAL_CLIENT_ID` + `PAYPAL_CLIENT_SECRET` + `PAYPAL_ENV=sandbox`. Real Orders v2 create/approval/capture and a Payments v2 refund on claim; `SIM-…` IDs and no money movement otherwise.
 - **Paying as the buyer in the live sandbox** — if the sandbox app belongs to a **business/merchant** account, PayPal blocks it from paying itself. Create a **Personal** sandbox account (developer.paypal.com → Sandbox → Accounts) and log in with it, or use guest card checkout in the popup: **Pay with a credit or Visa Debit card** → **No, thanks** → test Visa `4111 1111 1111 1111`, `12/30`, CVV `123`, any billing address.
 - **Live verification** — real sandbox capture/refund and local-model AI results: **[LIVE-TEST.md](LIVE-TEST.md)**.

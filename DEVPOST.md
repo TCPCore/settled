@@ -65,7 +65,7 @@ We would rather say this first.
 
 **Live when sandbox credentials are set:** real PayPal **sandbox** order, approval, capture and refund IDs — the manual demo step renders real PayPal Buttons; the video states which take it is (sandbox or labelled SIM).
 
-**Live sandbox verification (Nov 4, 2026):** order `1TD07351F78687411` → capture `05T456380E807962V` (`REFUNDED`) → refund `2KN47117H3971321W` (`COMPLETED`, $249.00), checked directly against the PayPal sandbox API. The local AI (`llama3.2:3b`) negotiated a $249 list to $237 and explained the claim. Details: [LIVE-TEST.md](LIVE-TEST.md).
+**Live sandbox verification (Nov 4, 2026):** order `1TD07351F78687411` → capture `05T456380E807962V` (`REFUNDED`) → refund `2KN47117H3971321W` (`COMPLETED`, $249.00), checked directly against the PayPal sandbox API. The AI (`gpt-oss:20b` via Ollama Cloud; local `llama3.2:3b` fallback) negotiated a $249 list to $237 and explained the claim. Details: [LIVE-TEST.md](LIVE-TEST.md).
 
 **Simulated by default for judges:** with no keys the app runs in SIM mode — `SIM-…` payment/refund IDs, no money moves. Fulfillment ("simulate delivery"), KYB, and the $25,000 network pool are demo fixtures, not production systems. **The reserve is demo capital**, not a balance sheet: production is an insurer/LC-backed reserve with per-merchant caps and a backtested loss curve.
 

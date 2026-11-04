@@ -381,12 +381,20 @@
   async function call(method, path, body, label) {
     var entry = startLog(method, path, label, body);
     var started = (window.performance && performance.now) ? performance.now() : Date.now();
+    var t0 = Date.now();
+    // Visible elapsed timer: a slow model looks like progress, not a stall.
+    var waitTimer = setInterval(function () {
+      var msEl = entry && entry.querySelector ? entry.querySelector('.log-ms') : null;
+      if (msEl) msEl.textContent = ((Date.now() - t0) / 1000).toFixed(1) + 's';
+    }, 250);
     try {
       var res = await S.api(path, { method: method, body: body });
+      clearInterval(waitTimer);
       var ms = Math.round(((window.performance && performance.now) ? performance.now() : Date.now()) - started);
       finishLog(entry, 'OK', ms, res, false, false);
       return res;
     } catch (err) {
+      clearInterval(waitTimer);
       var ms2 = Math.round(((window.performance && performance.now) ? performance.now() : Date.now()) - started);
       var errBody = (err && err.data) ? err.data : { error: { code: (err && err.code) || 'error', message: (err && err.message) || 'Request failed' } };
       finishLog(entry, err && err.status ? 'HTTP ' + err.status : 'ERR', ms2, errBody, true, false);

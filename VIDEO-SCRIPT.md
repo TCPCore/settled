@@ -12,6 +12,7 @@
 - Open `http://127.0.0.1:4173/demo.html`; click **Reset**; confirm the header pills read **AI: <model>** and **PAYPAL SANDBOX** (not SIM).
 - Run **Run full demo** once to warm the server, then **Reset** again. The take starts from a clean state.
 - Browser: fresh profile, bookmarks bar hidden, zoom 100%, window 1600×900 (upscale to 1440p in the editor), notifications off, other tabs closed.
+- **AI model warm.** `/api/config` should show `AI: gpt-oss:20b` (Ollama Cloud, ~3 s/step). If using local Ollama, run `ollama run llama3.2:3b "ok"` first and set `AI_TIMEOUT_MS=30000` — a cold CPU model takes 10–20 s and looks like a stall.
 - **PayPal sandbox buyer ready.** If your app belongs to a business/merchant account, PayPal blocks it from paying itself. Either create a **Personal** sandbox account (developer.paypal.com → Sandbox → Accounts) and log in with it, or use guest card checkout: **Pay with a credit or Visa Debit card** → **No, thanks** → test Visa `4111 1111 1111 1111`, `12/30`, CVV `123`, any billing address. Do this once in pre-roll so the live take is one clean pass.
 - Record with QuickTime/OSB at 1080p or 1440p, 30fps, system audio muted (voice-over recorded separately or live — live is fine if the room is quiet).
 
