@@ -24,7 +24,7 @@
 
 | Time | Screen action | Voice-over (exact) |
 |---|---|---|
-| **0:00–0:12** | `demo.html`, scorecard visible. Cursor still. | *"PayPal can already let an AI agent pay. It can't let it trust — who the agent is, whether the merchant will deliver, and who pays if it goes wrong. We built that layer."* |
+| **0:00–0:12** | `demo.html`, scorecard visible. Cursor still. | *"PayPal can already let an AI agent pay. It can't let a merchant negotiate with that agent — or trust it. So we built the merchant's negotiation desk for the agent economy: personal AI meets merchant agent, in the open, with a signed contract and a refund if it fails."* |
 | **0:12–0:32** | Slow pan down the five axes: Authorization 5, Trust 2, Protection 1, Negotiation 1, Recourse 3. | *"Meet Maya. She runs risk at a $200M brand. Half her shoppers abandon because they're not sure a store is real. Chargebacks take thirty days. And agent orders are arriving with no answer to: who pays if it fails?"* |
 | **0:32–0:52** | Click **1 · Trust credential**. Result card appears (tier A, 91, 94%, $5,000 cap, $12,500 reserve). Hover the signature/verify line. | *"This is Northwind Audio. Not a badge they bought — a credential signed from 4,812 settled payments, deliveries and disputes. Tier A, score 91, 94% coverage, five-thousand-dollar cap, twelve-five reserve. And it travels — to any store, any PSP, any agent."* |
 | **0:52–1:10** | Click **2 · Agent passport**; then **Try RogueBot**. Result: ProcureBot verified, RogueBot rejected. | *"Before the agent spends a dollar it presents a passport: verified operator, a signed spend mandate, a five-hundred-dollar limit. RogueBot has no verified operator and an expired mandate — rejected before an order exists."* |

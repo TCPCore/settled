@@ -6,7 +6,9 @@
 
 ## 1. The idea in one page
 
-**Settled is the assurance layer for commerce and AI agents.** It turns every order into a signed, insured deal:
+**The framing:** **PayPal gives every merchant a negotiation desk for the agent economy.** The merchant publishes its policy, trust credential and protection terms; its merchant agent negotiates with any consumer's personal AI; both sign an Agent Commerce Contract; PayPal settles; the buyer gets instant recourse. It is the human trade ritual — trust, haggle, contract, guarantee, refund — at machine speed, with an audit trail.
+
+**Settled is the merchant-side tool that makes that possible.** It turns every order into a signed, insured deal:
 
 1. **Merchant Trust Credential** — a signed, portable record built from real payment outcomes (delivery, disputes, refunds, chargebacks), not reviews or paid badges.
 2. **Risk-priced protection** — per-order pricing: tier A 35 bps / B 90 / C 150, a hard cap, and a settlement mode (instant capture / capture+reserve / escrow / decline).
@@ -16,6 +18,7 @@
 **Settlement stays on PayPal**: Orders v2, Payments v2 refunds, Invoicing, webhooks, Agent Ready/AP2/ACP/UCP for agent authorization. **No custody** — the reserve lives at the merchant's PSP, an LC, or an insurer.
 
 **One line:** *Reputation settles with the payment.*
+**The pitch:** *PayPal gives every merchant a negotiation desk for the agent economy — so personal AIs can haggle, contract, pay and get recourse safely.*
 
 ---
 

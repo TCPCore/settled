@@ -1,7 +1,8 @@
 # Settled — one-page judge brief
 
 **"Reputation settles with the payment."**
-A PayPal-native assurance layer for commerce and AI agents: a signed, portable merchant trust credential; protection priced per order against a hard cap; a claim paid from the merchant's reserve in seconds; an agent passport and a signed commerce contract.
+
+**PayPal's merchant negotiation desk for the agent economy.** A PayPal-native tool the merchant turns on: it publishes a policy, a signed trust credential and protection terms; its **merchant agent** negotiates with a consumer's **personal AI**; both sign an **Agent Commerce Contract**; PayPal settles; a buyer/agent claim is paid from the merchant's reserve in seconds. The human trade ritual — trust, haggle, contract, guarantee, refund — at machine speed, with an audit trail.
 
 ---
 

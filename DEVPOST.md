@@ -2,7 +2,7 @@
 
 **Reputation settles with the payment.**
 
-A PayPal-native assurance layer for commerce and AI agents: a signed, portable merchant trust credential, protection priced per order against a hard cap, and a claim paid from the merchant's reserve in about a second — with an AI buyer agent negotiating inside a signed mandate.
+**PayPal's merchant negotiation desk for the agent economy.** A PayPal-native tool that lets a merchant publish its policy, trust credential and protection terms, then let its merchant agent negotiate with any consumer's personal AI — visible offer/counter/accept, a signed Agent Commerce Contract, PayPal settlement, and a buyer claim paid from the merchant's reserve in about a second. The human trade ritual — trust, haggle, contract, guarantee, refund — at machine speed, with an audit trail.
 
 > **Links (fill before submitting)**
 > - Repo: https://github.com/TCPCore/settled (MIT — see [LICENSE](LICENSE))
