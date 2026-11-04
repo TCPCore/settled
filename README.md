@@ -114,6 +114,8 @@ node server.js
 
 - **AI** — `AI_PROVIDER=openai` + `AI_API_KEY` (`AI_MODEL`, `AI_BASE_URL`, `AI_TIMEOUT_MS` optional). Turns on the model-generated negotiation transcript and the claim explainer. No key or an API error → deterministic fallback (`ai.used:false`), same accepted price.
 - **PayPal sandbox** — `PAYPAL_LIVE=1` + `PAYPAL_CLIENT_ID` + `PAYPAL_CLIENT_SECRET` + `PAYPAL_ENV=sandbox`. Real Orders v2 create/approval/capture and a Payments v2 refund on claim; `SIM-…` IDs and no money movement otherwise.
+- **Paying as the buyer in the live sandbox** — if the sandbox app belongs to a **business/merchant** account, PayPal blocks it from paying itself. Create a **Personal** sandbox account (developer.paypal.com → Sandbox → Accounts) and log in with it, or use guest card checkout in the popup: **Pay with a credit or Visa Debit card** → **No, thanks** → test Visa `4111 1111 1111 1111`, `12/30`, CVV `123`, any billing address.
+- **Live verification** — real sandbox capture/refund and local-model AI results: **[LIVE-TEST.md](LIVE-TEST.md)**.
 - **Check what's on** — `GET /api/config` returns `{mode, ai, paypal}` (never secrets); the demo header shows `AI: <model>` / `AI: fallback` and `SIM` / `PAYPAL SANDBOX`.
 
 ### Screenshots
