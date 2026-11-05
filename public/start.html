@@ -6,6 +6,17 @@
 <title>Settled — demo hub</title>
 <link rel="stylesheet" href="styles.css">
 <style>
+  .topbar{background:rgba(7,13,24,.92);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;backdrop-filter:blur(12px)}
+  .topbar-inner{display:flex;align-items:center;gap:20px;max-width:1240px;margin:0 auto;padding:0 24px;height:64px}
+  .brand{display:flex;align-items:center;gap:9px;text-decoration:none;flex:none}
+  .brand-mark{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--emerald-dim);border:1px solid var(--emerald-line);color:var(--emerald);font:800 13px var(--mono)}
+  .brand-text{display:flex;flex-direction:column;line-height:1.08}
+  .brand-name{font:750 14px var(--sans);color:var(--ink);letter-spacing:-.01em}
+  .brand-sub{font:600 7.5px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--muted-2);display:block}
+  .nav{display:flex;align-items:center;gap:16px;margin-left:auto}
+  .nav a{font:650 10.5px var(--sans);color:var(--muted);text-decoration:none;padding:5px 0;border-bottom:1px solid transparent}
+  .nav a:hover,.nav a.active{color:var(--ink);border-bottom-color:var(--emerald)}
+  .topbar-right{display:flex;align-items:center;margin-left:8px;flex:none}
   .hub{max-width:1220px;margin:0 auto;padding:38px 26px 80px}
   .hub-hero{max-width:860px;margin-bottom:28px}
   .hub-hero h1{font-size:48px;line-height:1.04;letter-spacing:-.04em;margin:12px 0 14px}
