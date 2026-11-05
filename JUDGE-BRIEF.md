@@ -1,4 +1,4 @@
-# Settled — one-page judge brief
+# bit-settled — one-page judge brief
 
 **"Reputation settles with the payment."**
 

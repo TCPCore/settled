@@ -1,4 +1,4 @@
-# Settled — novelty, money, niche, USP, pitch, and what the demo really is
+# bit-settled — novelty, money, niche, USP, pitch, and what the demo really is
 
 *Write-up for judges / investors / PayPal BD · 2026-11-04 · grounded in the working demo in this folder, the prior-art and PayPal-history research, and the Strategyzer audits in `research/`.*
 

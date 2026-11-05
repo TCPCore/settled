@@ -1,6 +1,6 @@
-# Settled
+# bit-settled
 
-**Reputation settles with the payment.**
+**Settled** — reputation settles with the payment.
 
 A working prototype of **Trust Settlement**: a portable, HMAC-signed merchant trust ledger that prices buyer protection at checkout and pays claims instantly from a merchant reserve. Built for the idea in [../paypal-parley/TRUST-SETTLEMENT.md](../paypal-parley/TRUST-SETTLEMENT.md).
 

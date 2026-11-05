@@ -1,13 +1,22 @@
 {
-  "name": "settled",
+  "name": "bit-settled",
   "version": "0.1.0",
   "private": true,
-  "description": "Settled \u2014 reputation settles with the payment. A working Trust Settlement prototype.",
+  "description": "bit-settled \u2014 PayPal merchant negotiation desk for the agent economy.",
   "scripts": {
     "start": "node server.js",
     "test": "PORT=4400 node test/e2e.js"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "author": {
+    "name": "cptlight",
+    "url": "https://github.com/cptlight"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TCPCore/bit-settled.git"
+  },
+  "homepage": "https://github.com/TCPCore/bit-settled"
 }
