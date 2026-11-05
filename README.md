@@ -127,6 +127,10 @@ Open **[/integrate.html](http://127.0.0.1:4173/integrate.html)** (or `integrate.
 - **[DEPLOY.md](DEPLOY.md)** — Render Blueprint (`render.yaml`) and Docker instructions for a private demo URL.
 - **[AGENT-CHAT-SPEC.md](AGENT-CHAT-SPEC.md)** — the transparent agent-to-agent negotiation interface.
 
+## Live sandbox demo for judges
+
+**[LIVE-DEMO.md](LIVE-DEMO.md)** — run a **live PayPal-sandbox + AI** demo without exposing secrets: time-boxed `cloudflared` tunnel (recommended) or a separate hosted service with sandbox keys. Covers the sandbox buyer/guest-card approval, `mode:"live"` verification, and key rotation.
+
 ## Deployability
 
 Three paths, one code path — the full map is **[DEFENSIBILITY.md](DEFENSIBILITY.md)**: what deploys today, what a partner still has to build, and the honest roadmap.
