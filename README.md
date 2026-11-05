@@ -42,6 +42,30 @@ The plug-and-play surface:
 
 The **private floor never leaves the server**: `publicProduct()` strips `sell_min`/`sell_max`/`auto_accept`; the index only ever exposes `published_range`. Pausing the merchant agent (Enabled off) removes the merchant from the index and returns `409 MERCHANT_AGENT_DISABLED` on a new contract.
 
+## Adapters & index feed
+
+The machine-readable version of the same flow — any inventory in, any indexer or personal AI out, one hosted checkout. Full guide: **[ADAPTERS.md](ADAPTERS.md)**; frozen contracts: [ADAPTER-SPEC.md](ADAPTER-SPEC.md) and [INDEX-FEED-SPEC.md](INDEX-FEED-SPEC.md).
+
+| Direction | Surface | Status |
+|---|---|---|
+| **Inventory in** | `POST /api/merchants/:id/catalog/import` — CSV · JSON · Shopify payload · WooCommerce payload · remote JSON feed | ready (Shopify/Woo as **payloads**, no OAuth) |
+| **Index out** | `GET /api/index/manifest` → `GET /api/index/feed` (opaque cursor pages, `updated_since`) → `GET /api/index/openapi.json` | ready |
+| **Agents in** | `GET /api/agent-manifest` and `/.well-known/settled-agent.json` (REST + OpenAPI 3.0.3) | ready; MCP/A2A packaging roadmap |
+| **Checkout out** | hosted `/negotiate.html` + PayPal Buttons at the agreed amount | ready; Shopify/Woo plugins roadmap |
+
+```bash
+# adapter registry (ready vs roadmap)
+curl -s http://127.0.0.1:4173/api/adapters | python3 -m json.tool
+# indexer: discover, then page the feed
+curl -s http://127.0.0.1:4173/api/index/manifest | python3 -m json.tool
+curl -s 'http://127.0.0.1:4173/api/index/feed?limit=2' | python3 -m json.tool
+# personal AI: tool manifest + the machine contract
+curl -s http://127.0.0.1:4173/api/agent-manifest | python3 -m json.tool
+```
+
+Feed items are keyed by a stable `offer_id` (`m1:p1`), ordered deterministically so cursor pagination cannot skip, and carry only `published_range` — never `sell_min`/`auto_accept`. `/market.html` shows the "For indexers" panel (manifest/feed/OpenAPI + copy); `/merchant.html` has the import panel.
+
+**60-second indexer + agent path:** `npm test` (74/74) → `node server.js` → `/api/index/manifest` → `/api/index/feed` → `POST /api/contracts` + `/ai-auto` → `POST /api/merchants/:id/orders` → `/negotiate.html?merchant=m1&product=p1` for the full hosted flow. No merchant URL is needed anywhere in the indexer path: the feed carries `negotiate_url`.
 
 ## Screenshots
 
@@ -55,7 +79,7 @@ The **private floor never leaves the server**: `publicProduct()` strips `sell_mi
 
 ## The write-up (novelty, money, niche, USP, pitch, demo reality)
 
-**[WRITEUP.md](WRITEUP.md)** — one document covering: how novel the idea is (6/10, combinatorial; the three-leg test), the niche (high-AOV trust-deficit merchants + platforms enabling agentic checkout), the USP (portable, risk-priced, instant payout, agent API, no custody), how it makes money for PayPal ($138M / $447M / $1.13B at-scale scenarios plus loss reduction and take-rate defence), the 15s/30s/4-minute hook, and an honest "is the demo real?" audit (real logic + 69/69 tests; simulated money by default; live PayPal sandbox path one env var away).
+**[WRITEUP.md](WRITEUP.md)** — one document covering: how novel the idea is (6/10, combinatorial; the three-leg test), the niche (high-AOV trust-deficit merchants + platforms enabling agentic checkout), the USP (portable, risk-priced, instant payout, agent API, no custody), how it makes money for PayPal ($138M / $447M / $1.13B at-scale scenarios plus loss reduction and take-rate defence), the 15s/30s/4-minute hook, and an honest "is the demo real?" audit (real logic + 74/74 tests; simulated money by default; live PayPal sandbox path one env var away).
 
 ## Before the hackathon: the Strategyzer-grounded playbook
 
@@ -122,7 +146,7 @@ The repo is the submission: working prototype + MIT license + Devpost text + a <
 ```bash
 cd settled
 node server.js        # → http://127.0.0.1:4173/demo.html
-npm test              # full e2e suite — 69/69 assertions (trust, passport, contract, AI, PayPal SIM)
+npm test              # full e2e suite — 74/74 assertions (trust, passport, contract, AI, PayPal SIM)
 ```
 
 ### Configure AI + PayPal (both optional)
@@ -158,7 +182,7 @@ node server.js
 
 ### 60-second judge path
 
-1. `npm test` — 69/69 assertions green, no network needed.
+1. `npm test` — 74/74 assertions green, no network needed.
 2. `node server.js` → open **`/demo.html`** → **Reset** → **Run full demo** → scorecard ends **ALL FIVE AXES 8+**.
 3. Step 3: leave **AI agents** checked → watch the negotiation transcript with `AI`/`FALLBACK` badges and the signed contract hash.
 4. Step 4: order at the agreed amount. In SIM it shows a payment id; with sandbox credentials the manual step renders real **PayPal Buttons** in a "Live PayPal sandbox" block (approve → real capture id).
@@ -236,7 +260,7 @@ The claim flow is the point: a buyer taps **Report a problem**, checks the evide
 
 ## Build notes & test status
 
-- **E2E: 69/69 pass.** `npm test` (spawns its own server on 4400, resets seed at start and end).
+- **E2E: 74/74 pass.** `npm test` (spawns its own server on 4400, resets seed at start and end).
 - **Risk constants were re-fit** from the spec's literal weights so the seed table reproduces exactly (91/76/54); the five component formulas and weighted-sum shape are unchanged. Documented in `lib/risk.js`.
 - `POST /api/merchants/:id/orders` returns **200** (the spec enumerates only 400/404/409; QA accepts 200/201).
 - `fulfill` sets `status: "delivered"`; a second fulfill returns **409**.
