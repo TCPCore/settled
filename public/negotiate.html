@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settled — negotiate with an agent</title>
+<meta name="description" content="Your AI buyer agent negotiates with the merchant's agent inside a signed mandate, PayPal settles the agreed price, and a claim is paid from the merchant reserve in seconds.">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* Page-scoped layout: agent-to-agent negotiation. Everything else uses styles.css. */
+  .neg-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,.9fr);gap:16px;align-items:start}
+  .neg-col{display:flex;flex-direction:column;gap:16px;min-width:0}
+  @media (max-width:1000px){.neg-grid{grid-template-columns:minmax(0,1fr)}}
+  @media (max-width:640px){.neg-grid{gap:12px}}
+  /* Narrow screens: let the shared top nav wrap instead of overflowing by a few px. */
+  @media (max-width:900px){
+    .topnav-in{flex-wrap:wrap;row-gap:8px}
+    .nav{order:3;width:100%;flex-wrap:wrap}
+    .nav-side{margin-left:auto}
+  }
+
+  .prod{display:grid;grid-template-columns:96px minmax(0,1fr);gap:14px;padding:16px 18px;min-width:0}
+  @media (max-width:560px){.prod{grid-template-columns:minmax(0,1fr)}}
+  .prod-art{width:96px;height:96px;border-radius:13px;border:1px solid var(--line);background:
+    radial-gradient(120% 120% at 22% 12%,rgba(106,166,255,.2),transparent 58%),
+    radial-gradient(120% 120% at 86% 96%,rgba(43,217,160,.16),transparent 62%),
+    linear-gradient(160deg,#14223a,#0d1829);
+    display:grid;place-items:center;font:750 24px var(--mono);color:rgba(233,239,249,.9);flex:none;overflow:hidden}
+  .prod-name{font:750 18px/1.25 var(--sans);letter-spacing:-.02em;color:var(--ink);overflow-wrap:anywhere}
+  .prod-desc{margin-top:6px;font-size:11.5px;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
+  .prod-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .price-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:12px;min-width:0}
+  .price-now{font:750 26px/1 var(--sans);letter-spacing:-.03em;color:var(--ink)}
+  .price-list{font:600 11px var(--mono);color:var(--muted-2);text-decoration:line-through}
+  .price-range{font:600 10px var(--mono);color:var(--blue);overflow-wrap:anywhere}
+  .terms{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+  .term{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:3px 8px;font:600 9.5px var(--mono);color:var(--muted);background:rgba(9,16,29,.55);white-space:nowrap}
+  .term svg{width:11px;height:11px;flex:none;color:var(--muted-2)}
+
+  .facts{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(29,44,68,.55);border-top:1px solid rgba(29,44,68,.55)}
+  @media (max-width:520px){.facts{grid-template-columns:1fr}}
+  .facts .fact{background:rgba(9,16,29,.62);padding:10px 13px;min-width:0}
+  .fact .fact-label{font:600 9px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted-2)}
+  .fact .fact-value{margin-top:5px;font:650 12.5px/1.4 var(--sans);color:var(--ink-2);overflow-wrap:anywhere}
+
+  .passport{display:flex;align-items:flex-start;gap:12px;padding:16px 18px;min-width:0}
+  .p-avatar{width:38px;height:38px;border-radius:10px;flex:none;display:grid;place-items:center;
+    border:1px solid var(--blue-line);background:var(--blue-dim);color:var(--blue);font:750 12px var(--mono)}
+  .p-name{font:750 13px/1.3 var(--sans);color:var(--ink);overflow-wrap:anywhere}
+  .p-sub{margin-top:3px;font:500 10.5px/1.5 var(--sans);color:var(--muted);overflow-wrap:anywhere}
+  .p-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .mandate-wrap{padding:0 18px 6px}
+  .mandate-wrap .field-label{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .mandate-wrap .input{max-width:200px}
+  .neg-hint{margin-top:7px;font:500 10.5px/1.5 var(--sans);color:var(--muted-2);overflow-wrap:anywhere}
+  .neg-hint.warn{color:var(--gold)}
+  .neg-actions{display:flex;flex-wrap:wrap;align-items:center;gap:9px;padding:13px 18px;border-top:1px solid rgba(29,44,68,.8)}
+  .neg-note{padding:0 18px 14px;font:500 10.5px/1.6 var(--sans);color:var(--muted-2)}
+  .neg-note b{color:var(--ink-2)}
+
+  .chat{display:flex;flex-direction:column;gap:12px;padding:16px 18px;max-height:470px;overflow:auto;min-width:0}
+  .b-row{display:flex;gap:8px;min-width:0}
+  .b-row.right{flex-direction:row-reverse}
+  .b-av{width:26px;height:26px;border-radius:8px;flex:none;display:grid;place-items:center;border:1px solid var(--line-2);
+    background:rgba(9,16,29,.8);font:750 9px var(--mono);color:var(--muted);margin-top:2px}
+  .b-row.buyer .b-av{border-color:var(--blue-line);background:var(--blue-dim);color:var(--blue)}
+  .b-row.merchant .b-av{border-color:var(--gold-line);background:var(--gold-dim);color:var(--gold)}
+  .bubble{max-width:min(560px,88%);min-width:0;border:1px solid var(--line);border-radius:11px;padding:9px 11px;background:rgba(13,24,41,.9)}
+  .b-row.buyer .bubble{border-color:rgba(106,166,255,.28);background:rgba(106,166,255,.055)}
+  .b-row.merchant .bubble{border-color:rgba(245,196,81,.26);background:rgba(245,196,81,.045)}
+  .b-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+  .b-name{font:700 10.5px var(--sans);color:var(--ink-2);overflow-wrap:anywhere}
+  .b-action{font:700 8.5px var(--mono);letter-spacing:.07em;text-transform:uppercase;border-radius:999px;padding:2px 6px;border:1px solid var(--line-2);color:var(--muted)}
+  .b-action.offer{color:var(--blue);border-color:var(--blue-line)}
+  .b-action.counter{color:var(--gold);border-color:var(--gold-line)}
+  .b-action.accept{color:var(--emerald);border-color:var(--emerald-line)}
+  .b-price{font:700 10px var(--mono);color:var(--ink);background:rgba(9,16,29,.72);border:1px solid var(--line-2);border-radius:999px;padding:2px 7px;white-space:nowrap}
+  .b-policy{font:600 8.5px var(--mono);letter-spacing:.05em;color:var(--muted-2);text-transform:uppercase}
+  .b-msg{margin-top:6px;font:500 12px/1.55 var(--sans);color:var(--ink-2);overflow-wrap:anywhere}
+  .b-why{margin-top:6px;padding-left:7px;border-left:2px solid var(--line-2);font:500 10.5px/1.5 var(--sans);color:var(--muted-2);overflow-wrap:anywhere}
+
+  .hash-line{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 18px;border-top:1px solid rgba(29,44,68,.8);font:600 9.5px var(--mono);color:var(--muted-2);min-width:0}
+  .hash-line b{color:var(--emerald);font-weight:700;overflow-wrap:anywhere}
+  .hash-line .sep{color:var(--line-2)}
+
+  .steps{display:flex;flex-direction:column;gap:12px;padding:14px 18px}
+  .step{display:flex;gap:10px;min-width:0}
+  .step-n{width:21px;height:21px;border-radius:6px;flex:none;display:grid;place-items:center;border:1px solid var(--line-2);
+    background:rgba(9,16,29,.7);font:700 9px var(--mono);color:var(--muted)}
+  .step b{display:block;font:700 11.5px/1.35 var(--sans);color:var(--ink-2)}
+  .step p{margin-top:3px;font:500 10.5px/1.55 var(--sans);color:var(--muted-2)}
+  .guard{margin:0 18px 14px;padding:10px 11px;border:1px solid var(--blue-line);background:rgba(106,166,255,.06);border-radius:10px;
+    font:500 10.5px/1.6 var(--sans);color:var(--muted)}
+  .guard b{color:var(--blue)}
+
+  .call-log{padding:8px 18px 14px;display:flex;flex-direction:column;max-height:230px;overflow:auto}
+  .call{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(29,44,68,.45);font:600 9.5px var(--mono);min-width:0}
+  .call:last-child{border-bottom:none}
+  .call .m{color:var(--muted-2);flex:none;min-width:31px}
+  .call .p{color:var(--ink-2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .call .s{flex:none;color:var(--emerald)}
+  .call .s.err{color:var(--danger)}
+  .call .ms{flex:none;color:var(--muted-2);min-width:38px;text-align:right}
+  .call-log .empty{padding:16px 0}
+
+  .done-line{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;padding:14px 18px;border-top:1px solid rgba(29,44,68,.8)}
+  .big-amount{font:750 30px/1 var(--sans);letter-spacing:-.035em;color:var(--emerald)}
+  .done-line .muted{font:600 10px var(--mono)}
+
+  .prot-line{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .prot-line svg{width:12px;height:12px;flex:none;color:var(--muted-2)}
+  .note-inline{padding:0 18px 12px;font:500 10.5px/1.55 var(--sans);color:var(--muted-2)}
+  .err-box{margin:0 18px 14px;padding:10px 12px;border:1px solid var(--danger-line);background:var(--danger-dim);border-radius:10px;
+    font:600 10.5px/1.55 var(--sans);color:#FFB3B3;overflow-wrap:anywhere}
+  .footer{padding:22px 2px 8px;color:var(--muted-2);font:600 9.5px var(--mono);display:flex;flex-wrap:wrap;gap:10px 18px}
+  .footer a{color:var(--muted);text-decoration:none;border-bottom:1px solid var(--line-2)}
+  .footer a:hover{color:var(--ink-2)}
+</style>
+</head>
+<body data-page="market">
+<div class="bg" aria-hidden="true"></div>
+
+<header class="topnav">
+  <div class="topnav-in">
+    <a class="brand" href="index.html" aria-label="Settled home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.4 20.4 7v10L12 21.6 3.6 17V7L12 2.4Z" fill="#2BD9A0" fill-opacity=".16" stroke="#2BD9A0" stroke-width="1.3"/><path d="m8.3 12.2 2.4 2.4 5-5.2" stroke="#2BD9A0" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="brand-copy"><b>Settled</b><small>trust settlement</small></span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="market.html" class="is-active">Market</a>
+      <a href="merchant.html">Merchant</a>
+      <a href="demo.html">Demo</a>
+      <a href="store.html">Storefront</a>
+      <a href="agent.html">Agent console</a>
+      <a href="integrate.html">Integrate</a>
+    </nav>
+    <div class="nav-side">
+      <span class="env-pill" id="envPill"><span class="dot"></span><span id="envLabel">SIM</span></span>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <div id="apiError" class="panel api-error" hidden></div>
+
+  <div class="page-head">
+    <div style="min-width:0">
+      <div class="eyebrow">Agent-to-agent checkout</div>
+      <h1 class="page-title" id="pageTitle">Negotiate this price</h1>
+      <div class="page-sub" id="pageSub">Your buyer agent and the merchant's agent agree a number inside a signed mandate. PayPal settles it — and the buyer keeps an instant remedy.</div>
+    </div>
+    <div class="head-actions">
+      <a class="btn btn-ghost btn-sm" href="market.html">← Market</a>
+      <a class="btn btn-ghost btn-sm" href="demo.html">Full demo console</a>
+    </div>
+  </div>
+
+  <div class="neg-grid">
+    <div class="neg-col">
+
+      <section class="panel" id="productPanel" aria-live="polite">
+        <div class="panel-head">
+          <div style="min-width:0">
+            <div class="panel-title">Product</div>
+            <div class="panel-sub" id="productSub">Loading catalog…</div>
+          </div>
+          <span class="badge" id="negBadge">negotiable</span>
+        </div>
+        <div id="productBody"><div class="empty">Loading product…</div></div>
+      </section>
+
+      <section class="panel" id="agentPanel">
+        <div class="panel-head">
+          <div style="min-width:0">
+            <div class="panel-title">Your buyer agent</div>
+            <div class="panel-sub">Passport, mandate, and the only numbers this agent may spend</div>
+          </div>
+          <span class="badge blue" id="agentBadge">a1</span>
+        </div>
+        <div id="agentBody"><div class="empty">Loading agent passport…</div></div>
+        <div class="mandate-wrap">
+          <label class="field-label" for="mandateMax">Mandate ceiling (USD) <span class="mono muted" id="mandatePublish">—</span></label>
+          <input class="input" id="mandateMax" type="number" min="1" step="1" value="500" inputmode="decimal" autocomplete="off">
+          <div class="neg-hint" id="mandateHint">The agent can never offer, accept or pay above this number.</div>
+        </div>
+        <div class="neg-actions">
+          <button class="btn btn-primary" id="startBtn" type="button" disabled>Start agent negotiation</button>
+          <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">Reset</button>
+          <span class="badge" id="startBadge">0 of 2 moves</span>
+        </div>
+        <div class="neg-note" id="agentNote">Both sides sign the same contract: price, delivery, returns and the transcript hash. The merchant's private floor is never sent to this page.</div>
+      </section>
+
+      <section class="panel" id="chatPanel" hidden aria-live="polite">
+        <div class="panel-head">
+          <div style="min-width:0">
+            <div class="panel-title">Negotiation transcript</div>
+            <div class="panel-sub" id="chatSub">Agent-to-agent, policy-guarded</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="badge" id="aiBadge">—</span>
+            <span class="badge emerald" id="dealBadge">open</span>
+          </div>
+        </div>
+        <div class="chat" id="chatBody"></div>
+        <div class="hash-line" id="hashLine" hidden></div>
+        <div class="neg-actions" id="chatActions" hidden>
+          <button class="btn btn-gold" id="payBtn" type="button">Pay</button>
+          <span class="muted tiny">SIM rail — no funds move. The order still carries the signed contract hash.</span>
+        </div>
+      </section>
+
+      <section class="panel" id="orderPanel" hidden aria-live="polite">
+        <div class="panel-head">
+          <div style="min-width:0">
+            <div class="panel-title">Protected order</div>
+            <div class="panel-sub" id="orderSub">Paid at the negotiated price</div>
+          </div>
+          <span class="badge emerald" id="orderBadge">paid</span>
+        </div>
+        <div id="orderBody"></div>
+        <div class="neg-actions" id="orderActions">
+          <button class="btn btn-danger" id="claimBtn" type="button">File claim — item never arrived</button>
+          <span class="muted tiny" id="claimHint">Optional AI explainer reviews the evidence; the rule engine pays.</span>
+        </div>
+      </section>
+
+      <section class="panel" id="claimPanel" hidden aria-live="polite">
+        <div class="panel-head">
+          <div style="min-width:0">
+            <div class="panel-title">Claim settled</div>
+            <div class="panel-sub" id="claimSub">Refunded from the merchant reserve</div>
+          </div>
+          <span class="badge emerald" id="slaBadge">1.2s</span>
+        </div>
+        <div id="claimBody"></div>
+        <div class="neg-actions">
+          <a class="btn btn-ghost btn-sm" href="market.html">Back to the market</a>
+          <a class="btn btn-ghost btn-sm" href="demo.html">See the full 5-step console</a>
+        </div>
+      </section>
+
+    </div>
+
+    <aside class="neg-col">
+      <section class="panel" id="merchantPanel" aria-live="polite">
+        <div class="panel-head">
+          <div style="min-width:0">
+            <div class="panel-title">Merchant trust</div>
+            <div class="panel-sub">Signed credential, not a paid badge</div>
+          </div>
+          <span class="badge" id="verifyBadge">verifying…</span>
+        </div>
+        <div id="merchantBody"><div class="empty">Loading merchant…</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head compact">
+          <div class="panel-title">How this settles</div>
+          <span class="badge">3 steps</span>
+        </div>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><b>Agents negotiate</b><p>The buyer agent offers; the merchant agent answers from published policy. The model may talk, but the numbers come from the server.</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><b>The contract is signed</b><p>Price, delivery, returns and transcript are hashed into one Agent Commerce Contract before anyone pays.</p></div></div>
+          <div class="step"><span class="step-n">3</span><div><b>PayPal settles, recourse is instant</b><p>Pay the agreed price. If it never arrives, the claim is paid from the merchant's reserve in about a second.</p></div></div>
+        </div>
+        <div class="guard"><b>Guardrail:</b> the merchant's floor and auto-accept price are private. This page only ever sees the published range, and the agent cannot exceed your mandate.</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head compact">
+          <div class="panel-title">API calls</div>
+          <span class="badge" id="callCount">0</span>
+        </div>
+        <div class="call-log" id="callLog"><div class="empty">No calls yet</div></div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="footer">
+    <span>Settled — reputation settles with the payment.</span>
+    <a href="market.html">Market</a>
+    <a href="demo.html">Demo</a>
+    <a href="integrate.html">Integrate</a>
+  </div>
+</main>
+
+<script src="app.js"></script>
+<script src="negotiate.js"></script>
+</body>
+</html>
