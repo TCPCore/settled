@@ -32,7 +32,8 @@ Settled turns an order into a signed, insured deal with five parts:
 2. **Agent Passport** — operator KYB, capabilities, a signed spend mandate (spend limit, expiry, merchant allowlist) and reputation. An unverified agent (RogueBot) is rejected *before* an order exists.
 3. **Transparent agent-to-agent negotiation** — Sam's personal AI agent (ProcureBot, $500 mandate) and Northwind's seller agent talk in a visible chat: offer $214 → counter $237 (the seller policy price) → accept $237. The model writes every message; the server fixes the allowed prices, the mandate and the auto-accept, and the judge can see both the conversation and the guardrails. Terms are signed before payment.
 4. **Risk-priced protection** — tier A 35 bps / B 90 / C 150 / D decline; caps $5k/$2.5k/$1k; settlement mode instant capture / capture + reserve / escrow. A $237.00 order costs $0.83 to protect, merchant-paid, buyer free.
-5. **Instant recourse** — the buyer (or agent) files a claim with evidence; an AI explainer recommends approve/review/deny and shows its reasoning, then the rule engine pays from the merchant's reserve through the PayPal refund rail. **$237.00 refunded in ~1.2s**, reserve drops to $12,263.00, the merchant's score and tier recompute.
+5. **Merchant console + negotiation index** — the merchant connects PayPal, loads its catalog, sets the **private sell range** and the **public published range** for each item, edits its native agent's name/tone, and publishes. Every listed item appears in a category index that any consumer AI can search by category/budget. The private floor never leaves the server.
+6. **Instant recourse** — the buyer (or agent) files a claim with evidence; an AI explainer recommends approve/review/deny and shows its reasoning, then the rule engine pays from the merchant's reserve through the PayPal refund rail. **$237.00 refunded in ~1.2s**, reserve drops to $12,263.00, the merchant's score and tier recompute.
 
 Try the 5-step console at `/demo.html`. It runs end to end with one click and ends with **ALL FIVE AXES 8+**.
 
@@ -85,7 +86,7 @@ We would rather say this first.
 - AI negotiation that is genuinely constrained: same accepted price on the deterministic path, model-generated transcript when a key is present, no scenario where the model can exceed the mandate.
 - Real PayPal sandbox money path in the same app as the SIM fallback, with clean failures.
 - A working refund in ~1.2s that updates reserve, score and tier in the same screen — the moment the pitch turns on.
-- The full e2e suite passing locally with zero external dependencies: **63/63 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
+- The full e2e suite passing locally with zero external dependencies: **69/69 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
 
 ## What we learned
 

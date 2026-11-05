@@ -12,7 +12,9 @@
 - PayPal's FY2025 10-K shows **$1.34B protection provision / $1.49B realized losses** — a bundled cost centre with **no risk-based price and no portable trust signal**.
 - Agent checkout is arriving on PayPal's rails (Agent Ready, Store Sync, WebMCP) — agents can **pay**, but cannot **trust**, and buyers have no **instant recourse**.
 
-## Solution — three layers that ride the PayPal SDK
+## Solution — merchant setup, index, and three assurance layers
+
+**Merchant setup + index.** The merchant connects PayPal, loads a catalog, sets a private sell range and a public published range per item, configures its native agent (name/tone/greeting), and publishes. Listed items appear in a category negotiation index that any consumer AI can search by category and budget. The private floor never leaves the server.
 
 1. **Trust** — an HMAC/W3C signed **Merchant Trust Credential** built from settled payments, delivery and disputes. Portable to any store, PSP or agent; verified via `POST /api/trust/verify`.
 2. **Protection** — **risk-priced per order**: tier A 35 bps / B 90 / C 150 / decline; cap $5k/$2.5k/$1k; instant capture / capture+reserve / escrow. The merchant pays; the buyer pays $0.
@@ -45,7 +47,7 @@ Trust credential (m1: tier A, 91, 94% coverage, $5,000 cap, $12,500 reserve) →
 
 ## Evidence today / what is simulated
 
-- **Real:** risk engine, HMAC credential + hash chain, reserve accounting, claims, agent passport, contract signing, PayPal Orders adapter, **63/63 e2e tests**.
+- **Real:** risk engine, HMAC credential + hash chain, reserve accounting, claims, agent passport, contract signing, PayPal Orders adapter, **69/69 e2e tests**.
 - **Simulated:** payment ids and delivery in SIM mode; the $25k pool is a demo pool. **Production:** insurer/LC-backed reserve, carrier delivery evidence, counsel/insurance workstreams. Say this before a judge asks.
 - **Pre-revenue, pre-traction:** the next 30 days are pre-registered tests — 12 merchant interviews, 3/12 LOIs at ≥25 bps, a holdout conversion test (≥5% relative lift), a 20-claim concierge pilot, and one insurer term sheet.
 

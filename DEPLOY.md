@@ -42,7 +42,7 @@ Use the `trycloudflare.com` URL only for private testing. It is public and tempo
 2. Watch step 3: Sam's personal agent negotiates with Northwind's seller agent; policy strip; signed contract.
 3. Step 4: SIM payment id (public demo); step 5: instant refund + AI claim review.
 4. Read `/` dashboard, `/agent.html`, and [LIVE-TEST.md](LIVE-TEST.md) for the live sandbox IDs in the recorded video.
-5. Run `npm test` (63/63) from the repo.
+5. Run `npm test` (69/69) from the repo.
 
 ## Safety
 

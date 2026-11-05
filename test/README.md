@@ -70,7 +70,7 @@ If `server.js` is missing the suite exits `1` with `server.js not found … back
 | T35 | claim drains the merchant reserve, then the shortfall is paid from the network pool (reserve 900, 6 × 159 claims → 105 + 54) |
 | T36 | final cleanup reset (leaves seed state) |
 
-63 tests (37 base + 20 v2 + 6 v3), ~6–9 s against a warm server. Last verified green: **63/63, exit 0** on a freshly spawned server (`PORT=4400 node test/e2e.js`) — the server is killed on exit and leaves no listener.
+69 tests (37 base + 20 v2 + 6 v3 + 6 v4), ~8–11 s against a warm server. Last verified green: **69/69, exit 0** on a freshly spawned server (`PORT=4400 node test/e2e.js`) — the server is killed on exit and leaves no listener.
 
 ## v2 coverage — HACKATHON-DEMO-SPEC (agents, contracts, protection, demo)
 
@@ -107,6 +107,17 @@ If `server.js` is missing the suite exits `1` with `server.js not found … back
 | T63 | PayPal SIM lifecycle: `/api/paypal/create-order` → `SIM-…`; `/capture` → `COMPLETED` + order `paid` + `capture_id`; `/refund` → `SIM-RF-…`; **merchant reserve untouched** by PayPal routes |
 | T64 | order with `simulate:true` → `paid` immediately, `simulated:true`, `SIM-…` payment id; a plain SIM-mode order stays `simulated:false` |
 | T65 | regression/markers: `/demo.html` + `/demo.js` 200 and carry `AI agents`, `PayPal`, the AI badge; `demo.js` calls `/api/config` and `ai-auto`; final reset restores seed |
+
+## v4 coverage — MERCHANT-BUILD-SPEC (catalog, negotiation index, merchant pages)
+
+| Test | Covers |
+|---|---|
+| T66 | `GET /api/categories` → `{categories:[{id,name,count,min,max}], total}`; every index item's category appears; `sum(count) === indexed item count`; `total` = category count or item count |
+| T67 | `GET /api/index` → items with `merchant/product/published_range/terms/protection/negotiate_url`; `negotiate_url` points at `/negotiate.html?...&product=…`; `total === items.length`; **no `sell_min` / `sell_max` / `auto_accept` keys anywhere** in `/api/index`, `/api/categories`, `/api/merchants`, `/api/merchants/m1` |
+| T68 | filters: `category` (all results match), `q=aurora` (name/merchant substring), `budget=150` (published min ≤ budget), `merchant=m1`; `filters` echoed |
+| T69 | `PATCH /api/merchants/m1/catalog/p1` → `publish_min:220` persists, **index reflects** it; `publish_min < sell_min` and `auto_accept > sell_max` → 400; contract policy picks up patched `sell_min/auto_accept` (200/230); p1 restored to 204/237 |
+| T70 | p1 contract `list 249 / floor 204 / auto_accept 237`; `PATCH p2 {negotiable:false}` → p2 vanishes from `/api/index`; contract on p2 → **409 `PRODUCT_NOT_NEGOTIABLE`**; restore → p2 negotiable again |
+| T71 | `/merchant.html` ("Merchant agent setup" + catalog), `/market.html` ("The negotiation index"), `/negotiate.html` (negotiation + agent + pay) → 200 with markers; final reset restores 5 index items and p1 204/237 |
 
 ## Reading a failure
 
@@ -149,5 +160,14 @@ Every failure prints the assertion that broke and either the exact response body
 - **`configured` semantics.** T60 requires `paypal.configured === Boolean(client_id)` — a config flag that disagrees with the presence of a client id is a bug, not a variant.
 - **API helper vs literal path.** `demo.js` calls `S.api('/config')` and `S.api('/contracts/:id/ai-auto')` — the shared `Settled` helper prefixes `API_BASE = '/api'` (see `app.js`). T65 therefore accepts either the literal `/api/...` path **or** the helper form; matching raw literals only would be a false negative. T09 applies the same rule to `app.js`.
 - **`AI agents` / `PayPal` markers** are checked across `demo.html` + `demo.js` combined, since the badge label can live in either file (§5 allows additive DOM).
+
+### v4 (MERCHANT-BUILD-SPEC) ambiguities the suite resolves conservatively
+
+- **Index page filename.** The spec text says the negotiation index lives at `/index.html`, but `index.html` is the existing dashboard; the lead corrected it to **`/market.html`**. T71 tests `/market.html`.
+- **`categories.total`** is under-specified (category count vs item count). T66 accepts either and separately asserts `sum(count) === index items`, which is the property that actually matters.
+- **Category labels** come from the server (the real backend uses `Lighting`, not the spec example's `Home`); T68 filters with the category returned by the API rather than a hardcoded string.
+- **PATCH 400 code** is not frozen; T69 asserts the documented 400 status + `{error:{code,message}}` shape, not a specific code string (`INVALID_NEGOTIATION` on the current build).
+- **Merchant catalog may expose the full `negotiation` block** (private floor/ceiling) — §Data-model explicitly allows this for the prototype, so T67 only scans *public* endpoints (`/api/index`, `/api/categories`, `/api/merchants`, `/api/merchants/:id`), never `/api/merchants/:id/catalog`.
+- **`negotiable:false` also hides an item from the index** (§API: categories/index derive from listed+negotiable products); T70 asserts that as well as the 409.
 
 If the backend or spec changes, update the assertion and the corresponding row above; keep the `Tnn` ids stable so a failing demo check maps to a known behaviour.

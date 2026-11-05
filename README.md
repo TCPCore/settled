@@ -18,6 +18,9 @@ npm test                 # e2e API tests (spawns its own server, port 4173)
 | URL | What it shows |
 |---|---|
 | `http://127.0.0.1:4173/demo.html` | **Live demo console** — the 5-step hackathon story with scorecard and JSON log. **Start here for a demo.** |
+| `http://127.0.0.1:4173/merchant.html` | **Merchant agent console** — catalog, private sell range, public range, auto-accept, terms, editable agent name/tone/greeting, add product |
+| `http://127.0.0.1:4173/market.html` | **Negotiation index** — categories, search, budget, published ranges, merchant trust, protection, "Negotiate with agent" |
+| `http://127.0.0.1:4173/negotiate.html?merchant=m1&product=p1` | **Consumer-agent negotiation** — passport, mandate, agent-to-agent chat, signed contract, SIM/live checkout, claim |
 | `http://127.0.0.1:4173/` | **Merchant dashboard** — ledger, score, tier, reserve, fee, events, orders, verify signature |
 | `/store.html?merchant=m1` | **Storefront** — trust panel, checkout with risk-priced protection, receipt, instant claim |
 | `/agent.html` | **Agent console** — `POST /api/trust/verify`, threshold policy, agent purchase |
@@ -28,6 +31,16 @@ Seeded merchants:
 - **m1 Northwind Audio** — tier **A**, score 91, 35 bps, instant capture, reserve $12,500
 - **m2 Lumen Supply** — tier **B**, score 76, 90 bps, capture + reserve
 - **m3 Nova Finds** — tier **C**, score 54, 150 bps, **escrow** (new seller, no instant capture)
+
+### Merchant setup → index → agent negotiation
+
+The plug-and-play surface:
+
+1. **Merchant console** (`/merchant.html`) — connect, load the catalog, and for each item set the **private sell range**, the **public published range** (what agents see), auto-accept, max discount, terms and listed/negotiable flags. The merchant's native agent name, tone and greeting are editable too.
+2. **Negotiation index** (`/market.html`) — every listed item, grouped by category, with the public range, merchant trust tier/score, protection and terms. Filter by category, budget or merchant; "Negotiate with agent" opens the consumer flow.
+3. **Negotiate** (`/negotiate.html?merchant=m1&product=p1`) — the consumer's personal AI presents a passport and mandate, negotiates with the merchant agent, signs the contract, pays, and can file an instant claim.
+
+The **private floor never leaves the server**: `publicProduct()` strips `sell_min`/`sell_max`/`auto_accept`; the index only ever exposes `published_range`. Pausing the merchant agent (Enabled off) removes the merchant from the index and returns `409 MERCHANT_AGENT_DISABLED` on a new contract.
 
 
 ## Screenshots
@@ -42,7 +55,7 @@ Seeded merchants:
 
 ## The write-up (novelty, money, niche, USP, pitch, demo reality)
 
-**[WRITEUP.md](WRITEUP.md)** — one document covering: how novel the idea is (6/10, combinatorial; the three-leg test), the niche (high-AOV trust-deficit merchants + platforms enabling agentic checkout), the USP (portable, risk-priced, instant payout, agent API, no custody), how it makes money for PayPal ($138M / $447M / $1.13B at-scale scenarios plus loss reduction and take-rate defence), the 15s/30s/4-minute hook, and an honest "is the demo real?" audit (real logic + 63/63 tests; simulated money by default; live PayPal sandbox path one env var away).
+**[WRITEUP.md](WRITEUP.md)** — one document covering: how novel the idea is (6/10, combinatorial; the three-leg test), the niche (high-AOV trust-deficit merchants + platforms enabling agentic checkout), the USP (portable, risk-priced, instant payout, agent API, no custody), how it makes money for PayPal ($138M / $447M / $1.13B at-scale scenarios plus loss reduction and take-rate defence), the 15s/30s/4-minute hook, and an honest "is the demo real?" audit (real logic + 69/69 tests; simulated money by default; live PayPal sandbox path one env var away).
 
 ## Before the hackathon: the Strategyzer-grounded playbook
 
@@ -109,7 +122,7 @@ The repo is the submission: working prototype + MIT license + Devpost text + a <
 ```bash
 cd settled
 node server.js        # → http://127.0.0.1:4173/demo.html
-npm test              # full e2e suite — 63/63 assertions (trust, passport, contract, AI, PayPal SIM)
+npm test              # full e2e suite — 69/69 assertions (trust, passport, contract, AI, PayPal SIM)
 ```
 
 ### Configure AI + PayPal (both optional)
@@ -134,6 +147,9 @@ node server.js
 
 | | |
 |---|---|
+| **Merchant agent console** | ![merchant console](screenshots/merchant-console.png) |
+| **Negotiation index** | ![market index](screenshots/market-index.png) |
+| **Consumer-agent negotiation** | ![negotiate page](screenshots/negotiate-page.png) |
 | **Demo console — start** | ![demo start](screenshots/demo-start.png) |
 | **Demo console — all five axes 8+** | ![demo complete](screenshots/demo-complete.png) |
 | **Demo console — transparent agent-to-agent negotiation** | ![demo chat](screenshots/demo-chat.png) |
@@ -142,7 +158,7 @@ node server.js
 
 ### 60-second judge path
 
-1. `npm test` — 63/63 assertions green, no network needed.
+1. `npm test` — 69/69 assertions green, no network needed.
 2. `node server.js` → open **`/demo.html`** → **Reset** → **Run full demo** → scorecard ends **ALL FIVE AXES 8+**.
 3. Step 3: leave **AI agents** checked → watch the negotiation transcript with `AI`/`FALLBACK` badges and the signed contract hash.
 4. Step 4: order at the agreed amount. In SIM it shows a payment id; with sandbox credentials the manual step renders real **PayPal Buttons** in a "Live PayPal sandbox" block (approve → real capture id).
@@ -220,7 +236,7 @@ The claim flow is the point: a buyer taps **Report a problem**, checks the evide
 
 ## Build notes & test status
 
-- **E2E: 63/63 pass.** `npm test` (spawns its own server on 4400, resets seed at start and end).
+- **E2E: 69/69 pass.** `npm test` (spawns its own server on 4400, resets seed at start and end).
 - **Risk constants were re-fit** from the spec's literal weights so the seed table reproduces exactly (91/76/54); the five component formulas and weighted-sum shape are unchanged. Documented in `lib/risk.js`.
 - `POST /api/merchants/:id/orders` returns **200** (the spec enumerates only 400/404/409; QA accepts 200/201).
 - `fulfill` sets `status: "delivered"`; a second fulfill returns **409**.

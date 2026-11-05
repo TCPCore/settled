@@ -1401,6 +1401,200 @@ async function main() {
     assert(Array.isArray(claims.json.claims) && claims.json.claims.length === 0, 'claims cleared after final reset');
     return `demo.html ${html.text.length}B + demo.js ${js.text.length}B carry AI/PayPal markers; seed restored`;
   });
+
+  // =========================================================================
+  // v4 — merchant catalog + negotiation index (MERCHANT-BUILD-SPEC.md)
+  // =========================================================================
+  await reset();
+  let cats = null;
+  let idx = null;
+
+  await test('T66', 'v4 GET /api/categories → [{id,name,count,min,max}], total, consistent with index', async () => {
+    const r = await get('/api/categories');
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['categories', 'total'], 'categories response');
+    assert(Array.isArray(r.json.categories) && r.json.categories.length > 0, `categories must be a non-empty array, got ${JSON.stringify(r.json.categories).slice(0, 200)}`);
+    let sumCount = 0;
+    for (const c of r.json.categories) {
+      hasKeys(c, ['id', 'name', 'count', 'min', 'max'], 'category');
+      assert(typeof c.id === 'string' && c.id.length > 0, `category.id: ${JSON.stringify(c.id)}`);
+      assert(typeof c.name === 'string' && c.name.length > 0, `category.name: ${JSON.stringify(c.name)}`);
+      const count = num(c.count), cmin = num(c.min), cmax = num(c.max);
+      assert(count !== null && count >= 1, `category ${c.id}.count: expected >=1, got ${JSON.stringify(c.count)}`);
+      assert(cmin !== null && cmax !== null && cmin <= cmax, `category ${c.id}: min/max invalid (${JSON.stringify(c.min)}/${JSON.stringify(c.max)})`);
+      sumCount += count;
+    }
+    const total = num(r.json.total);
+    assert(total !== null, `categories.total must be numeric, got ${JSON.stringify(r.json.total)}`);
+    assert(total === r.json.categories.length || total === sumCount,
+      `categories.total (${total}) must be the category count (${r.json.categories.length}) or the item count (${sumCount})`);
+    const idxRes = await get('/api/index');
+    eq(idxRes.status, 200, 'index status');
+    const items = idxRes.json.items || [];
+    const catIds = new Set(r.json.categories.map((c) => String(c.id).toLowerCase()));
+    for (const it of items) {
+      const pc = String((it.product && it.product.category) || '').toLowerCase();
+      assert(catIds.has(pc), `index item ${it.product && it.product.id} category "${pc}" missing from /api/categories`);
+    }
+    assert(sumCount === items.length, `sum(category.count)=${sumCount} must equal indexed item count (${items.length}) — categories derive from listed+negotiable products`);
+    cats = r.json.categories;
+    return `${r.json.categories.length} categories (${sumCount} items), total=${total}`;
+  });
+
+  await test('T67', 'v4 GET /api/index → listed items + published_range; NO private range in public JSON', async () => {
+    const r = await get('/api/index');
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['items', 'total', 'filters'], 'index response');
+    assert(Array.isArray(r.json.items) && r.json.items.length > 0, 'index items must be non-empty');
+    for (const it of r.json.items) {
+      hasKeys(it, ['merchant', 'product', 'published_range', 'terms', 'protection', 'negotiate_url'], 'index item');
+      hasKeys(it.merchant, ['id', 'name', 'tier', 'score', 'fee_bps', 'cap', 'mode'], 'item.merchant');
+      hasKeys(it.product, ['id', 'name', 'price', 'category'], 'item.product');
+      hasKeys(it.published_range, ['min', 'max'], 'item.published_range');
+      const pmin = num(it.published_range.min);
+      assert(pmin !== null && pmin > 0, `published_range.min: ${JSON.stringify(it.published_range.min)}`);
+      const pmax = it.published_range.max;
+      if (pmax !== null && pmax !== undefined) {
+        assert(num(pmax) !== null, `published_range.max must be number|null, got ${JSON.stringify(pmax)}`);
+        assert(pmin <= num(pmax), `published_range min ${pmin} > max ${pmax}`);
+      }
+      assert(String(it.negotiate_url).includes('/negotiate.html?'), `negotiate_url must point at /negotiate.html, got ${JSON.stringify(it.negotiate_url)}`);
+      assert(String(it.negotiate_url).includes(`product=${it.product.id}`), `negotiate_url missing product=${it.product.id}: ${it.negotiate_url}`);
+      hasKeys(it.protection, ['fee_bps', 'cap', 'mode'], 'item.protection');
+    }
+    const total = num(r.json.total);
+    assert(total !== null && total === r.json.items.length, `index.total (${total}) must equal items.length (${r.json.items.length}) with 5 items and limit 50`);
+
+    // PRIVATE RANGE MUST NOT LEAK from any public read endpoint.
+    const leaks = ['sell_min', 'sell_max', 'auto_accept'];
+    const publics = ['/api/index', '/api/categories', '/api/merchants', '/api/merchants/m1'];
+    for (const ep of publics) {
+      const res = await get(ep);
+      eq(res.status, 200, `${ep} status`);
+      const blob = JSON.stringify(res.json);
+      for (const f of leaks) {
+        assert(!blob.includes(`"${f}"`), `PRIVATE LEAK: "${f}" appears in ${ep} public JSON`, { endpoint: ep, context: (blob.match(new RegExp(`.{0,70}\\\\?"${f}".{0,70}`)) || [''])[0].slice(0, 220) });
+      }
+    }
+    idx = r.json;
+    return `${r.json.items.length} listed items, published_range present, no sell_min/sell_max/auto_accept leak in 4 public endpoints`;
+  });
+
+  await test('T68', 'v4 GET /api/index filters: category, q, budget, merchant', async () => {
+    const base = idx || (await get('/api/index')).json;
+    assert(Array.isArray(base.items) && base.items.length >= 2, 'need at least 2 index items to filter');
+    const cat = base.items[0].product.category;
+    const byCat = await get(`/api/index?category=${encodeURIComponent(String(cat).toLowerCase())}`);
+    eq(byCat.status, 200, 'category filter status');
+    assert((byCat.json.items || []).length > 0, `category filter "${cat}" returned no items`);
+    for (const it of byCat.json.items) eq(String(it.product.category).toLowerCase(), String(cat).toLowerCase(), 'category filter match');
+
+    const byQ = await get('/api/index?q=aurora');
+    eq(byQ.status, 200, 'q filter status');
+    assert((byQ.json.items || []).length >= 1, 'q=aurora returned no items');
+    for (const it of byQ.json.items) {
+      const hay = `${it.product.name} ${it.merchant.name}`.toLowerCase();
+      assert(hay.includes('aurora'), `q=aurora matched an item without "aurora": ${it.product.name} / ${it.merchant.name}`);
+    }
+
+    const byBudget = await get('/api/index?budget=150');
+    eq(byBudget.status, 200, 'budget filter status');
+    assert((byBudget.json.items || []).length >= 1, 'budget=150 returned no items');
+    for (const it of byBudget.json.items) {
+      assert(num(it.published_range.min) <= 150, `budget=150 returned item with published min ${it.published_range.min}`);
+    }
+
+    const byM = await get('/api/index?merchant=m1');
+    eq(byM.status, 200, 'merchant filter status');
+    assert((byM.json.items || []).length >= 1, 'merchant=m1 returned no items');
+    for (const it of byM.json.items) eq(it.merchant.id, 'm1', 'merchant filter match');
+
+    assert(isObj(byM.json.filters), 'index response must echo filters');
+    return `category ${cat}: ${byCat.json.items.length}, q aurora: ${byQ.json.items.length}, budget 150: ${byBudget.json.items.length}, m1: ${byM.json.items.length}`;
+  });
+
+  await test('T69', 'v4 PATCH catalog → range updates, index reflects, validation 400, contract uses new policy', async () => {
+    const cat0 = await get('/api/merchants/m1/catalog');
+    eq(cat0.status, 200, 'catalog status');
+    hasKeys(cat0.json, ['merchant', 'products'], 'catalog');
+    const p1 = (cat0.json.products || []).find((x) => x.id === 'p1');
+    assert(p1, 'catalog must include p1');
+    hasKeys(p1.negotiation, ['negotiable', 'listed', 'sell_min', 'sell_max', 'publish_min', 'publish_max', 'auto_accept'], 'p1.negotiation (merchant view may expose full policy)');
+
+    const up = await http('PATCH', '/api/merchants/m1/catalog/p1', { body: { negotiation: { publish_min: 220 } } });
+    eq(up.status, 200, 'PATCH status');
+    hasKeys(up.json, ['product', 'catalog'], 'PATCH response');
+    near(up.json.product.negotiation.publish_min, 220, 'patched publish_min');
+
+    const idx1 = await get('/api/index?merchant=m1');
+    const item1 = (idx1.json.items || []).find((i) => i.product.id === 'p1');
+    assert(item1, 'p1 missing from /api/index after PATCH');
+    near(item1.published_range.min, 220, 'index published_range.min must reflect the PATCH');
+
+    const bad = await http('PATCH', '/api/merchants/m1/catalog/p1', { body: { negotiation: { publish_min: 100 } } });
+    const badDetail = assertErrorShape(bad, 400, 'publish_min < sell_min');
+    const bad2 = await http('PATCH', '/api/merchants/m1/catalog/p1', { body: { negotiation: { auto_accept: 999 } } });
+    const badDetail2 = assertErrorShape(bad2, 400, 'auto_accept > sell_max');
+
+    const pol = await http('PATCH', '/api/merchants/m1/catalog/p1', { body: { negotiation: { sell_min: 200, auto_accept: 230 } } });
+    eq(pol.status, 200, 'policy PATCH status');
+    const c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+    near(c.policy.floor, 200, 'contract policy.floor must come from product sell_min');
+    near(c.policy.auto_accept, 230, 'contract policy.auto_accept must come from product config');
+
+    const restore = await http('PATCH', '/api/merchants/m1/catalog/p1', { body: { negotiation: { sell_min: 204, auto_accept: 237, publish_min: 214, publish_max: 249 } } });
+    eq(restore.status, 200, 'restore status');
+    near(restore.json.product.negotiation.sell_min, 204, 'p1 restored sell_min');
+    return `${badDetail}; ${badDetail2}; publish_min 220 visible in index; contract 200/230; p1 restored to 204/237`;
+  });
+
+  await test('T70', 'v4 p1 contract floor 204/auto 237; negotiable:false → 409 PRODUCT_NOT_NEGOTIABLE', async () => {
+    const c = await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+    near(c.list_price, 249, 'p1 list_price');
+    near(c.policy.floor, 204, 'p1 policy.floor (seed)');
+    near(c.policy.auto_accept, 237, 'p1 policy.auto_accept (seed)');
+
+    const off = await http('PATCH', '/api/merchants/m1/catalog/p2', { body: { negotiation: { negotiable: false } } });
+    eq(off.status, 200, 'PATCH p2 negotiable=false');
+    const idxOff = await get('/api/index');
+    assert(!(idxOff.json.items || []).some((i) => i.product.id === 'p2'), 'non-negotiable p2 must not appear in /api/index');
+    const rejected = await post('/api/contracts', { merchant_id: 'm1', product_id: 'p2', buyer_agent_id: 'a1' });
+    const detail = assertErrorShape(rejected, 409, 'contract on non-negotiable product');
+    eq(String(rejected.json.error.code), 'PRODUCT_NOT_NEGOTIABLE', 'error.code');
+
+    const on = await http('PATCH', '/api/merchants/m1/catalog/p2', { body: { negotiation: { negotiable: true } } });
+    eq(on.status, 200, 'PATCH p2 negotiable=true');
+    const ok = await createContract({ merchant_id: 'm1', product_id: 'p2', buyer_agent_id: 'a1' });
+    eq(ok.status, 'open', 'p2 contract must open after negotiable restored');
+    return `p1 floor 204/auto 237; ${detail}; p2 restored`;
+  });
+
+  await test('T71', 'v4 pages /merchant.html, /market.html, /negotiate.html → 200 + markers', async () => {
+    const merchant = await get('/merchant.html');
+    eq(merchant.status, 200, 'merchant.html status');
+    assert(/merchant agent setup/i.test(merchant.text), `merchant.html must contain "Merchant agent setup"; got ${merchant.text.length}B`);
+    assert(/catalog/i.test(merchant.text), 'merchant.html must reference the catalog');
+
+    const market = await get('/market.html');
+    eq(market.status, 200, 'market.html status');
+    assert(/negotiation index/i.test(market.text), `market.html must contain "The negotiation index"; got ${market.text.length}B`);
+    assert(/negotiat/i.test(market.text), 'market.html must reference negotiation');
+
+    const negotiate = await get('/negotiate.html');
+    eq(negotiate.status, 200, 'negotiate.html status');
+    assert(/negotiat/i.test(negotiate.text), 'negotiate.html must reference negotiation');
+    assert(/agent/i.test(negotiate.text), 'negotiate.html must reference the agent flow');
+    assert(/paypal|pay/i.test(negotiate.text), 'negotiate.html must reference payment');
+
+    await reset();
+    const again = await get('/api/index');
+    eq(again.status, 200, 'index after reset');
+    assert((again.json.items || []).length === 5, `after reset the index must list 5 seeded items, got ${(again.json.items || []).length}`);
+    const p1 = (await get('/api/merchants/m1/catalog')).json.products.find((x) => x.id === 'p1');
+    near(p1.negotiation.sell_min, 204, 'p1 sell_min after reset');
+    near(p1.negotiation.auto_accept, 237, 'p1 auto_accept after reset');
+    return `3 pages 200 with markers; reset restored 5 index items + p1 204/237`;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -535,13 +535,18 @@
     var hash = $('hashLine');
     if (hash) {
       var sig = c.signatures || {};
+      function sigText(v) {
+        if (!v) return '';
+        if (typeof v === 'string') return v;
+        return v.sig || v.signature || v.hash || '';
+      }
       hash.hidden = false;
       hash.innerHTML =
         '<span>signed contract <b class="mono">' + esc(S.shortHash(c.hash, 22)) + '</b></span>' +
         '<span class="sep">·</span>' +
-        '<span>buyer sig <b class="mono">' + esc(S.shortHash(sig.buyer, 16)) + '</b></span>' +
+        '<span>buyer sig <b class="mono">' + esc(S.shortHash(sigText(sig.buyer), 16)) + '</b></span>' +
         '<span class="sep">·</span>' +
-        '<span>seller sig <b class="mono">' + esc(S.shortHash(sig.merchant, 16)) + '</b></span>' +
+        '<span>seller sig <b class="mono">' + esc(S.shortHash(sigText(sig.merchant), 16)) + '</b></span>' +
         '<span class="sep">·</span>' +
         '<span>mandate <b class="mono">' + esc(money(c.mandate && c.mandate.max)) + '</b></span>' +
         '<span class="sep">·</span>' +

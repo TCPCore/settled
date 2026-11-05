@@ -21,6 +21,7 @@ const paypal = require('./lib/paypal');
 const passport = require('./lib/passport');
 const contracts = require('./lib/contract');
 const protection = require('./lib/protection');
+const catalog = require('./lib/catalog');
 const ai = require('./lib/ai');
 
 /**
@@ -804,6 +805,46 @@ function handleListClaims(req, res, query) {
   sendJson(res, 200, { claims: list });
 }
 
+// ------------------------------------------------------- catalog / index ----
+
+function handleCategories(req, res) {
+  sendJson(res, 200, catalog.categories());
+}
+
+function handleIndex(req, res, query) {
+  sendJson(res, 200, catalog.index({
+    category: query.get('category'),
+    q: query.get('q'),
+    budget: query.get('budget'),
+    merchant: query.get('merchant'),
+    limit: query.get('limit'),
+  }));
+}
+
+function handleCatalogGetAgent(req, res, merchantId) {
+  const view = catalog.catalogFor(merchantId);
+  sendJson(res, 200, { agent: view.agent, merchant: view.merchant });
+}
+
+async function handleAgentConfigUpdate(req, res, merchantId) {
+  const body = await readJson(req);
+  sendJson(res, 200, catalog.updateAgent(merchantId, body));
+}
+
+function handleCatalogGet(req, res, merchantId) {
+  sendJson(res, 200, catalog.catalogFor(merchantId));
+}
+
+async function handleCatalogCreate(req, res, merchantId) {
+  const body = await readJson(req);
+  sendJson(res, 200, catalog.createProduct(merchantId, body));
+}
+
+async function handleCatalogUpdate(req, res, merchantId, productId) {
+  const body = await readJson(req);
+  sendJson(res, 200, catalog.updateProduct(merchantId, productId, body));
+}
+
 // ------------------------------------------------------------ static files --
 const STATIC_ROUTES = {
   '/': { file: 'index.html', type: 'text/html; charset=utf-8' },
@@ -889,7 +930,7 @@ const server = http.createServer(async (req, res) => {
     if (method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+        'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       return res.end();
@@ -941,7 +982,24 @@ async function routeApi(req, res, method, pathname, query) {
       if (sub === 'verify' && method === 'POST') return handleMerchantVerify(req, res, id);
       if (sub === 'events' && method === 'GET') return handleMerchantEvents(req, res, id);
       if (sub === 'orders' && method === 'POST') return handleCreateOrder(req, res, id);
+      if (sub === 'agent' && method === 'PATCH') return handleAgentConfigUpdate(req, res, id);
+      if (sub === 'agent' && method === 'GET') return handleCatalogGetAgent(req, res, id);
+      if (sub === 'catalog' && method === 'GET') return handleCatalogGet(req, res, id);
+      if (sub === 'catalog' && method === 'POST') return handleCatalogCreate(req, res, id);
     }
+    if (seg.length === 5 && seg[3] === 'catalog' && method === 'PATCH') {
+      return handleCatalogUpdate(req, res, id, seg[4]);
+    }
+  }
+
+  // /api/categories
+  if (seg.length === 2 && seg[1] === 'categories' && method === 'GET') {
+    return handleCategories(req, res);
+  }
+
+  // /api/index (negotiation index)
+  if (seg.length === 2 && seg[1] === 'index' && method === 'GET') {
+    return handleIndex(req, res, query);
   }
 
   // /api/orders/:id/fulfill | claim
