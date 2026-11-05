@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settled — demo hub</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .hub{max-width:1220px;margin:0 auto;padding:38px 26px 80px}
+  .hub-hero{max-width:860px;margin-bottom:28px}
+  .hub-hero h1{font-size:48px;line-height:1.04;letter-spacing:-.04em;margin:12px 0 14px}
+  .hub-hero h1 em{color:var(--gold);font-style:normal}
+  .hub-hero p{font-size:14px;line-height:1.6;color:var(--muted);max-width:760px}
+  .hub-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-top:22px}
+  .hub-card{display:flex;flex-direction:column;gap:7px;background:linear-gradient(180deg,rgba(17,28,46,.92),rgba(11,20,34,.98));border:1px solid var(--line);border-radius:14px;padding:16px 17px 15px;text-decoration:none;color:inherit;transition:border-color .2s,transform .2s}
+  .hub-card:hover{border-color:rgba(43,217,160,.45);transform:translateY(-1px)}
+  .hub-kicker{font:800 8.5px var(--mono);letter-spacing:.14em;color:var(--emerald);text-transform:uppercase}
+  .hub-card h2{font-size:15px;letter-spacing:-.01em;margin:2px 0 1px}
+  .hub-card p{font-size:11px;line-height:1.55;color:var(--muted);margin:0}
+  .hub-arrow{margin-top:auto;padding-top:9px;font:700 9px var(--mono);letter-spacing:.08em;color:var(--muted-2)}
+  .hub-card:hover .hub-arrow{color:var(--emerald)}
+  .hub-section{margin-top:30px;border-top:1px solid var(--line);padding-top:22px}
+  .hub-section h2{font-size:17px;margin:0 0 5px}
+  .hub-section p{font-size:12px;color:var(--muted);margin:0 0 14px}
+  .hub-machine{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .hub-code{background:#081120;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font:600 9.5px/1.7 var(--mono);color:var(--ink-2);overflow:auto;white-space:pre}
+  .hub-code b{color:var(--emerald)}
+  .hub-foot{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+  @media(max-width:980px){.hub-grid{grid-template-columns:1fr 1fr}.hub-machine{grid-template-columns:1fr}.hub-hero h1{font-size:36px}}
+  @media(max-width:620px){.hub-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="start.html" aria-label="Settled demo hub">
+      <span class="brand-mark" aria-hidden="true">S</span>
+      <span class="brand-text"><span class="brand-name">Settled</span><span class="brand-sub">trust settlement</span></span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="start.html" class="active">Demo hub</a>
+      <a href="merchant.html">Merchant</a>
+      <a href="market.html">Market</a>
+      <a href="demo.html">5-step demo</a>
+      <a href="integrate.html">Integrate</a>
+    </nav>
+    <div class="topbar-right"><span class="env-pill"><span class="dot"></span><span>SIM</span></span></div>
+  </div>
+</header>
+
+<main class="hub">
+  <section class="hub-hero">
+    <div class="eyebrow">PayPal AI Hackathon 2026 · plug-and-play demo</div>
+    <h1>One merchant agent.<br><em>Any personal AI.</em></h1>
+    <p>Settled is PayPal's merchant negotiation desk for the agent economy. A merchant configures its catalog, private sell range and published range; its native agent negotiates with any customer's AI; PayPal settles; the buyer gets instant recourse. Every surface below is live in this demo.</p>
+  </section>
+
+  <div class="hub-grid">
+    <a class="hub-card" href="merchant.html">
+      <div class="hub-kicker">01 · Configure</div>
+      <h2>Merchant agent setup</h2>
+      <p>Catalog, private sell range, public published range, auto-accept, terms, editable agent name/tone, import CSV/JSON/Shopify/Woo/feed.</p>
+      <div class="hub-arrow">OPEN MERCHANT CONSOLE →</div>
+    </a>
+    <a class="hub-card" href="market.html">
+      <div class="hub-kicker">02 · Discover</div>
+      <h2>Negotiation index</h2>
+      <p>Boards r/audio, r/gadgets, r/lighting; published ranges; trust, protection, terms; the machine feed and OpenAPI links.</p>
+      <div class="hub-arrow">OPEN INDEX →</div>
+    </a>
+    <a class="hub-card" href="negotiate.html?merchant=m1&product=p1">
+      <div class="hub-kicker">03 · Negotiate</div>
+      <h2>Consumer-agent checkout</h2>
+      <p>Passport + mandate → agent-to-agent chat → signed contract → SIM/live PayPal → instant claim.</p>
+      <div class="hub-arrow">OPEN NEGOTIATION →</div>
+    </a>
+    <a class="hub-card" href="demo.html">
+      <div class="hub-kicker">04 · The whole story</div>
+      <h2>5-step demo console</h2>
+      <p>Trust credential → agent passport → agent-to-agent deal → protection + PayPal → instant recourse, with scorecard and JSON log.</p>
+      <div class="hub-arrow">RUN THE DEMO →</div>
+    </a>
+    <a class="hub-card" href="embed-demo.html">
+      <div class="hub-kicker">05 · Install</div>
+      <h2>Drop-in storefront widget</h2>
+      <p>A faux storefront with a normal PayPal Buy button and a one-line “Negotiate with AI” widget.</p>
+      <div class="hub-arrow">OPEN EMBED DEMO →</div>
+    </a>
+    <a class="hub-card" href="integrate.html">
+      <div class="hub-kicker">06 · Integrate</div>
+      <h2>Three-step integration</h2>
+      <p>Connect PayPal + policy, bind the contract at checkout, let the consumer AI verify/negotiate/sign.</p>
+      <div class="hub-arrow">OPEN INTEGRATION →</div>
+    </a>
+    <a class="hub-card" href="index.html">
+      <div class="hub-kicker">07 · Operate</div>
+      <h2>Merchant dashboard</h2>
+      <p>Ledger, score, tier, reserve, fee, events, orders, signature verification.</p>
+      <div class="hub-arrow">OPEN DASHBOARD →</div>
+    </a>
+    <a class="hub-card" href="store.html?merchant=m1">
+      <div class="hub-kicker">08 · Buy</div>
+      <h2>Storefront checkout</h2>
+      <p>Trust panel, risk-priced protection, receipt, instant claim — the buyer-facing path.</p>
+      <div class="hub-arrow">OPEN STOREFRONT →</div>
+    </a>
+    <a class="hub-card" href="agent.html">
+      <div class="hub-kicker">09 · Verify</div>
+      <h2>Agent console</h2>
+      <p>POST /api/trust/verify, threshold policy, agent purchase — the machine trust check.</p>
+      <div class="hub-arrow">OPEN AGENT CONSOLE →</div>
+    </a>
+  </div>
+
+  <section class="hub-section">
+    <h2>Machine-readable by design</h2>
+    <p>Any central indexer or personal AI can discover every offer without knowing a merchant URL.</p>
+    <div class="hub-machine">
+      <div class="hub-code"><b>GET /api/index/manifest</b>
+→ schema, categories, totals, endpoints
+
+<b>GET /api/index/feed?cursor=</b>
+→ offer_id, published_range, negotiate_url, updated_at
+   opaque cursor · no private floor
+
+<b>GET /api/index/openapi.json</b>
+→ OpenAPI 3.0.3 · 7 paths
+
+<b>GET /api/agent-manifest</b>
+→ 7 tools for any agent runtime</div>
+      <div class="hub-code"><b>MCP (stdio)</b>
+node mcp/server.js
+SETTLED_BASE_URL=http://127.0.0.1:4173
+
+<b>A2A-style card</b>
+GET /.well-known/agent-card.json
+
+<b>Inventory adapters</b>
+GET /api/adapters
+CSV · JSON · Shopify · WooCommerce · remote feed
+
+<b>Drop-in widget</b>
+&lt;script src="/settled-widget.js"
+  data-merchant="m1" data-product="p1"&gt;&lt;/script&gt;</div>
+    </div>
+  </section>
+
+  <section class="hub-section">
+    <h2>Judge path — 90 seconds</h2>
+    <p>1. Open <b>Merchant agent setup</b> → see p1 private 204–249 / public 214–249 / auto 237. 2. Open <b>Negotiation index</b> → Audio board shows “$214–$249”. 3. Click <b>Negotiate with agent</b> → mandate $500 → $214 offer / $237 counter / accepted. 4. Pay → order at $237. 5. File claim → $237 refund from the merchant reserve in ~1.2s.</p>
+  </section>
+
+  <div class="hub-foot">
+    <a class="btn btn-primary" href="demo.html">Run the 5-step demo</a>
+    <a class="btn btn-ghost" href="merchant.html">Configure a merchant</a>
+    <a class="btn btn-ghost" href="market.html">Browse the index</a>
+    <a class="btn btn-ghost" href="embed-demo.html">See the one-line install</a>
+  </div>
+</main>
+</body>
+</html>
