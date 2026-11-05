@@ -1,0 +1,893 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Settled \u2014 Negotiation Index & Assurance API",
+    "version": "1.0.0",
+    "description": "Machine-readable negotiation index for PayPal-settled agent commerce. A personal AI discovers offers via manifest + feed, negotiates a contract, pays, and can file an instant claim. Private merchant reservation prices are never exposed; only published ranges are emitted.",
+    "contact": {
+      "name": "Settled"
+    },
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Settled demo instance"
+    }
+  ],
+  "tags": [
+    {
+      "name": "index",
+      "description": "Discovery: manifest, feed, search"
+    },
+    {
+      "name": "negotiate",
+      "description": "Agent-to-agent price negotiation"
+    },
+    {
+      "name": "settle",
+      "description": "PayPal order and instant recourse"
+    }
+  ],
+  "paths": {
+    "/api/index/manifest": {
+      "get": {
+        "tags": [
+          "index"
+        ],
+        "operationId": "getIndexManifest",
+        "summary": "Discovery document for indexers and personal agents",
+        "responses": {
+          "200": {
+            "description": "Manifest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Manifest"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/index/feed": {
+      "get": {
+        "tags": [
+          "index"
+        ],
+        "operationId": "getIndexFeed",
+        "summary": "Cursor-paginated, stable feed of public offers",
+        "description": "Ordered by offer_id (never by price) so pagination cannot skip or duplicate. Each item carries offer_id, published_range, negotiate_url and updated_at. Cursors are opaque.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque cursor from a previous next_cursor"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Category slug, e.g. audio"
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Delta crawl: only offers updated at/after this ISO timestamp"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of offers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/index": {
+      "get": {
+        "tags": [
+          "index"
+        ],
+        "operationId": "searchOffers",
+        "summary": "Filtered search over listed offers (human market page)",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "budget",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching offers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Offer"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "filters": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contracts": {
+      "post": {
+        "tags": [
+          "negotiate"
+        ],
+        "operationId": "startNegotiation",
+        "summary": "Open a negotiable contract for an offer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "merchant_id",
+                  "product_id",
+                  "buyer_agent_id"
+                ],
+                "properties": {
+                  "merchant_id": {
+                    "type": "string",
+                    "example": "m1"
+                  },
+                  "product_id": {
+                    "type": "string",
+                    "example": "p1"
+                  },
+                  "buyer_agent_id": {
+                    "type": "string",
+                    "example": "a1"
+                  },
+                  "mandate": {
+                    "type": "object",
+                    "properties": {
+                      "max": {
+                        "type": "number",
+                        "description": "Buyer spend ceiling"
+                      },
+                      "ttl_seconds": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Open contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Product is not negotiable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contracts/{id}/ai-auto": {
+      "post": {
+        "tags": [
+          "negotiate"
+        ],
+        "operationId": "autoNegotiate",
+        "summary": "Run the scripted/AI negotiation to a signed, locked price",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Accepted contract with dialogue transcript",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Contract not open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders": {
+      "get": {
+        "tags": [
+          "settle"
+        ],
+        "operationId": "listOrders",
+        "summary": "List orders, newest first",
+        "parameters": [
+          {
+            "name": "merchant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orders": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders/{id}/claim": {
+      "post": {
+        "tags": [
+          "settle"
+        ],
+        "operationId": "openClaim",
+        "summary": "File an instant protection claim against an order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "not_delivered",
+                      "not_as_described",
+                      "damaged"
+                    ]
+                  },
+                  "evidence": {
+                    "type": "boolean"
+                  },
+                  "use_ai": {
+                    "type": "boolean",
+                    "description": "Attach an AI adjudication rationale"
+                  },
+                  "actor": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claim approved and settled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Order already claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "PayPal refund failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Manifest": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "example": "settled-index/1.0"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "agent_protocol": {
+            "type": "string"
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "merchants": {
+                "type": "integer"
+              },
+              "categories": {
+                "type": "integer"
+              },
+              "offers": {
+                "type": "integer"
+              }
+            }
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "min": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "max": {
+                  "type": "number",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "endpoints": {
+            "type": "object",
+            "properties": {
+              "feed": {
+                "type": "string"
+              },
+              "search": {
+                "type": "string"
+              },
+              "negotiate": {
+                "type": "string"
+              },
+              "openapi": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "PublishedRange": {
+        "type": "object",
+        "description": "Public negotiation range. The merchant's private reservation band is never published.",
+        "properties": {
+          "min": {
+            "type": "number",
+            "nullable": true
+          },
+          "max": {
+            "type": "number",
+            "nullable": true
+          }
+        }
+      },
+      "Terms": {
+        "type": "object",
+        "properties": {
+          "delivery_days": {
+            "type": "integer"
+          },
+          "returns_days": {
+            "type": "integer"
+          },
+          "warranty_months": {
+            "type": "integer"
+          }
+        }
+      },
+      "Protection": {
+        "type": "object",
+        "properties": {
+          "fee_bps": {
+            "type": "integer"
+          },
+          "cap": {
+            "type": "number"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "instant",
+              "reserve",
+              "escrow",
+              "blocked"
+            ]
+          }
+        }
+      },
+      "Offer": {
+        "type": "object",
+        "required": [
+          "offer_id",
+          "published_range",
+          "negotiate_url",
+          "updated_at"
+        ],
+        "properties": {
+          "offer_id": {
+            "type": "string",
+            "description": "Stable id: merchantId:productId",
+            "example": "m1:p1"
+          },
+          "merchant": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "tier": {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C",
+                  "D"
+                ]
+              },
+              "score": {
+                "type": "integer"
+              },
+              "agent": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          },
+          "product": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "price": {
+                "type": "number"
+              }
+            }
+          },
+          "published_range": {
+            "$ref": "#/components/schemas/PublishedRange"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/Terms"
+          },
+          "protection": {
+            "$ref": "#/components/schemas/Protection"
+          },
+          "negotiate_url": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "FeedPage": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "string"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "next_cursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "null on the last page"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "filters": {
+            "type": "object"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Offer"
+            }
+          }
+        }
+      },
+      "Contract": {
+        "type": "object",
+        "properties": {
+          "contract": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "merchant_id": {
+                "type": "string"
+              },
+              "product_id": {
+                "type": "string"
+              },
+              "product_name": {
+                "type": "string"
+              },
+              "list_price": {
+                "type": "number"
+              },
+              "agreed_price": {
+                "type": "number",
+                "nullable": true
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "accepted",
+                  "rejected",
+                  "expired"
+                ]
+              },
+              "policy": {
+                "type": "object",
+                "description": "Server-enforced negotiation policy: the merchant's reservation floor, its policy auto-accept price, and the max discount. The model may write words but cannot move these numbers. Values are contract-scoped and private to the negotiation.",
+                "additionalProperties": true
+              },
+              "terms": {
+                "$ref": "#/components/schemas/Terms"
+              },
+              "transcript": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "hash": {
+                "type": "string",
+                "nullable": true
+              },
+              "signatures": {
+                "type": "object"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "ai": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "used": {
+                "type": "boolean",
+                "description": "true when an LLM wrote the prose; false = deterministic fallback"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string",
+                "nullable": true
+              },
+              "dialogue": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "merchant_id": {
+            "type": "string"
+          },
+          "product_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "fee_bps": {
+            "type": "integer"
+          },
+          "fee": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "paid",
+              "delivered",
+              "refunded"
+            ]
+          },
+          "payment_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Claim": {
+        "type": "object",
+        "properties": {
+          "claim": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "order_id": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "review",
+                  "denied"
+                ]
+              },
+              "refund": {
+                "type": "number"
+              },
+              "paid_from_reserve": {
+                "type": "number"
+              },
+              "paid_from_pool": {
+                "type": "number"
+              },
+              "paypal_refund_id": {
+                "type": "string"
+              },
+              "sla_ms": {
+                "type": "integer"
+              },
+              "actor": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

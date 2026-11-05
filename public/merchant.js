@@ -10,7 +10,21 @@
   var merchantId = S.qs('merchant') || 'm1';
   var catalogPath = '/merchants/' + encodeURIComponent(merchantId) + '/catalog';
   var agentPath = '/merchants/' + encodeURIComponent(merchantId) + '/agent';
+  var importPath = '/merchants/' + encodeURIComponent(merchantId) + '/catalog/import';
   var AGENT_TONES = ['consultative', 'concise', 'warm', 'formal'];
+  var ADAPTER_INFO = {
+    csv: { label: 'CSV upload', kind: 'csv', hint: 'Paste CSV text or choose a .csv file. Headers: sku/name/price/category/description.', placeholder: 'sku,name,price,category,description\nAURORA-ONE,Aurora One headphones,249,Audio,Reference-grade headphones.' },
+    json: { label: 'JSON payload', kind: 'json', hint: 'Paste a JSON object like {"products":[...]} or choose a .json file.', placeholder: '{"products":[{"sku":"AURORA-ONE","name":"Aurora One headphones","price":249,"category":"Audio","description":"..."}]}' },
+    shopify: { label: 'Shopify product payload', kind: 'json', hint: 'Payload adapter — paste a Shopify products export; no OAuth connection.', placeholder: '{"products":[{"id":1,"title":"Aurora One headphones","variants":[{"price":"249.00","sku":"AURORA-ONE"}],"product_type":"Audio","body_html":"..."}]}' },
+    woocommerce: { label: 'WooCommerce product payload', kind: 'json', hint: 'Payload adapter — paste a WooCommerce products export; no OAuth connection.', placeholder: '{"products":[{"id":1,"name":"Aurora One headphones","price":"249","sku":"AURORA-ONE","categories":[{"name":"Audio"}],"description":"..."}]}' },
+    feed: { label: 'Remote JSON feed', kind: 'feed', hint: 'Fetch a remote JSON catalog (array or {"products":[...]}) with a 5s server timeout.', placeholder: '' }
+  };
+  var IMPORT_SAMPLES = {
+    csv: 'sku,name,price,category,description\nAURORA-ONE,Aurora One headphones,249,Audio,Reference-grade over-ear headphones.\nAURORA-BUDS,Aurora Buds,129,Audio,Compact wireless earbuds with 32-hour case life.',
+    json: { products: [{ sku: 'AURORA-ONE', name: 'Aurora One headphones', price: 249, category: 'Audio', description: 'Reference-grade over-ear headphones.' }] },
+    shopify: { products: [{ id: 1, title: 'Aurora One headphones', variants: [{ price: '249.00', sku: 'AURORA-ONE' }], product_type: 'Audio', body_html: 'Reference-grade over-ear headphones.' }] },
+    woocommerce: { products: [{ id: 1, name: 'Aurora One headphones', price: '249', sku: 'AURORA-ONE', categories: [{ name: 'Audio' }], description: 'Reference-grade over-ear headphones.' }] }
+  };
   var DEFAULT_GREETING = 'Hi — I’m Northwind’s seller agent. Happy to help with product questions and the published price range.';
 
   var state = {
@@ -20,7 +34,8 @@
     health: null,
     loading: false,
     agent: null,
-    agentChanged: false
+    agentChanged: false,
+    adapters: null
   };
 
   var el = {
@@ -55,6 +70,30 @@
     agentSaveBtn: document.getElementById('agentSaveBtn'),
     agentSaveStatus: document.getElementById('agentSaveStatus'),
     agentFormError: document.getElementById('agentFormError'),
+    importForm: document.getElementById('importForm'),
+    importAdapter: document.getElementById('importAdapter'),
+    importAdapterBadge: document.getElementById('importAdapterBadge'),
+    importHint: document.getElementById('importHint'),
+    importDataField: document.getElementById('importDataField'),
+    importData: document.getElementById('importData'),
+    importDataHint: document.getElementById('importDataHint'),
+    importFileWrap: document.getElementById('importFileWrap'),
+    importFile: document.getElementById('importFile'),
+    importFileName: document.getElementById('importFileName'),
+    importUrlField: document.getElementById('importUrlField'),
+    importUrl: document.getElementById('importUrl'),
+    importSampleBtn: document.getElementById('importSampleBtn'),
+    importBtn: document.getElementById('importBtn'),
+    importError: document.getElementById('importError'),
+    importResult: document.getElementById('importResult'),
+    importResultAdapter: document.getElementById('importResultAdapter'),
+    importedCount: document.getElementById('importedCount'),
+    updatedCount: document.getElementById('updatedCount'),
+    skippedCount: document.getElementById('skippedCount'),
+    importErrors: document.getElementById('importErrors'),
+    importResultFoot: document.getElementById('importResultFoot'),
+    adapterList: document.getElementById('adapterList'),
+    adapterCount: document.getElementById('adapterCount'),
     addForm: document.getElementById('addForm'),
     addName: document.getElementById('addName'),
     addPrice: document.getElementById('addPrice'),
@@ -67,6 +106,7 @@
   S.mountNav('merchant');
   wire();
   initAgentDefaults();
+  updateImportMode();
   loadAll();
 
   /* --------------------------------------------------------- utils -- */
@@ -124,12 +164,16 @@
     el.apiError.hidden = true;
     try {
       var results = await Promise.all([
-        S.api(catalogPath),
-        S.api('/health').catch(function () { return null; })
+        S.api(catalogPath).catch(function (err) { return { __error: err }; }),
+        S.api('/health').catch(function () { return null; }),
+        S.api('/adapters').catch(function () { return null; })
       ]);
-      var catalog = results[0] && (results[0].catalog || results[0]);
       state.health = results[1] || null;
+      state.adapters = results[2] || null;
       if (state.health) S.setEnv(state.health.mode);
+      renderAdapterList();
+      if (results[0] && results[0].__error) throw results[0].__error;
+      var catalog = results[0] && (results[0].catalog || results[0]);
       applyCatalog(catalog, null, false);
       setBusy(el.refresh, false);
     } catch (err) {
@@ -356,6 +400,182 @@
     } finally {
       el.agentSaveBtn.disabled = false;
       el.agentSaveBtn.classList.remove('is-busy');
+    }
+  }
+
+  /* ------------------------------------------------- import catalog -- */
+  function renderAdapterList() {
+    var data = state.adapters;
+    var inventory = data && Array.isArray(data.inventory) ? data.inventory : [];
+    if (el.adapterCount) el.adapterCount.textContent = inventory.length ? String(inventory.length) : '—';
+    if (!inventory.length) {
+      el.adapterList.innerHTML = '<div class="import-loading">Registry unavailable — reload after the adapter API deploys.</div>';
+      return;
+    }
+    el.adapterList.innerHTML = inventory.map(function (a) {
+      var status = String(a.status || 'roadmap').toLowerCase();
+      var ready = status === 'ready';
+      var payload = String(a.mode || '').toLowerCase() === 'payload';
+      return '<div class="adapter-row">' +
+        '<div class="adapter-row-body">' +
+          '<div class="adapter-row-name">' + S.esc(a.name || a.id || 'adapter') + '</div>' +
+          '<div class="adapter-row-mode">' + S.esc(a.mode || 'push') + ' · ' + S.esc(a.id || '') + '</div>' +
+          (payload ? '<div class="adapter-payload">payload adapter · no OAuth yet</div>' : '') +
+        '</div>' +
+        '<span class="badge ' + (ready ? 'emerald' : 'gold') + '">' + S.esc(status) + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function currentAdapter() {
+    return el.importAdapter.value || 'csv';
+  }
+
+  function updateImportMode() {
+    var adapter = currentAdapter();
+    var info = ADAPTER_INFO[adapter] || ADAPTER_INFO.csv;
+    var feed = adapter === 'feed';
+    el.importHint.textContent = info.hint;
+    el.importDataField.hidden = feed;
+    el.importFileWrap.hidden = feed;
+    el.importUrlField.hidden = !feed;
+    el.importSampleBtn.hidden = feed;
+    el.importAdapterBadge.textContent = adapter;
+    el.importDataHint.textContent = adapter === 'csv' ? 'CSV text' : 'JSON payload';
+    el.importData.placeholder = info.placeholder || '';
+    el.importFile.setAttribute('accept', adapter === 'csv' ? '.csv,text/csv' : '.json,application/json');
+    el.importError.textContent = '';
+  }
+
+  function loadImportFile() {
+    var file = el.importFile.files && el.importFile.files[0];
+    if (!file) {
+      el.importFileName.textContent = 'No file selected';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      el.importError.textContent = 'File is larger than 2 MB.';
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      el.importData.value = String(reader.result || '');
+      el.importFileName.textContent = file.name;
+      el.importError.textContent = '';
+    };
+    reader.onerror = function () {
+      el.importError.textContent = 'Could not read that file.';
+    };
+    reader.readAsText(file);
+  }
+
+  function loadImportSample() {
+    var adapter = currentAdapter();
+    if (adapter === 'feed') return;
+    var sample = IMPORT_SAMPLES[adapter];
+    if (sample === undefined) return;
+    el.importData.value = typeof sample === 'string' ? sample : JSON.stringify(sample, null, 2);
+    el.importFileName.textContent = 'Sample payload';
+    el.importError.textContent = '';
+  }
+
+  function importErrorText(e) {
+    if (typeof e === 'string') return e;
+    if (e && typeof e === 'object') {
+      var bits = [];
+      if (e.row !== undefined) bits.push('row ' + e.row);
+      if (e.sku) bits.push('sku ' + e.sku);
+      if (e.id !== undefined && e.id !== null) bits.push('id ' + e.id);
+      if (e.message) bits.push(e.message);
+      else if (e.error) bits.push(e.error);
+      else bits.push(JSON.stringify(e));
+      return bits.join(': ');
+    }
+    return String(e);
+  }
+
+  function renderImportResult(res, adapter) {
+    var data = res || {};
+    el.importedCount.textContent = String(Number(data.imported) || 0);
+    el.updatedCount.textContent = String(Number(data.updated) || 0);
+    el.skippedCount.textContent = String(Number(data.skipped) || 0);
+    el.importResultAdapter.textContent = adapter;
+    el.importResult.hidden = false;
+    var errors = Array.isArray(data.errors) ? data.errors : (data.errors ? [data.errors] : []);
+    if (errors.length) {
+      el.importErrors.hidden = false;
+      el.importErrors.innerHTML = errors.map(function (e) {
+        return '<li>' + S.esc(importErrorText(e)) + '</li>';
+      }).join('');
+    } else {
+      el.importErrors.hidden = true;
+      el.importErrors.innerHTML = '';
+    }
+    el.importResultFoot.textContent = 'Catalog refreshing…';
+  }
+
+  function importFail(message) {
+    el.importError.textContent = message;
+    S.toast(message, 'err');
+  }
+
+  async function runImport(event) {
+    if (event) event.preventDefault();
+    if (el.importBtn.disabled) return;
+    var adapter = currentAdapter();
+    el.importError.textContent = '';
+    el.importResult.hidden = true;
+    var body;
+    if (adapter === 'feed') {
+      var url = (el.importUrl.value || '').trim();
+      if (!url) return importFail('Enter a feed URL.');
+      try {
+        var parsedUrl = new URL(url);
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') throw new Error('bad protocol');
+      } catch (e) {
+        return importFail('Feed URL must be a valid http(s) URL.');
+      }
+      body = { adapter: 'feed', url: url };
+    } else {
+      var raw = el.importData.value || '';
+      if (!raw.trim()) return importFail('Paste a payload or choose a file.');
+      if (adapter === 'csv') {
+        body = { adapter: 'csv', data: raw };
+      } else {
+        var parsed;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (e) {
+          return importFail('Payload is not valid JSON: ' + e.message);
+        }
+        if (!parsed || typeof parsed !== 'object') return importFail('Payload must be a JSON object.');
+        body = { adapter: adapter, data: parsed };
+      }
+    }
+    var before = {};
+    state.products.forEach(function (p) { if (p && p.id) before[p.id] = JSON.stringify(p); });
+    el.importBtn.disabled = true;
+    el.importBtn.classList.add('is-busy');
+    try {
+      var res = await S.api(importPath, { method: 'POST', body: body });
+      renderImportResult(res, adapter);
+      var products = res && Array.isArray(res.products) ? res.products : [];
+      var changed = products.filter(function (p) { return p && p.id && (!before[p.id] || JSON.stringify(p) !== before[p.id]); });
+      var highlightId = changed.length ? changed[0].id : null;
+      await refreshCatalog(highlightId);
+      el.importResultFoot.textContent = highlightId ? 'Catalog refreshed — imported/updated items highlighted below.' : 'Catalog refreshed.';
+      var counts = [];
+      if (res && res.imported !== undefined) counts.push(res.imported + ' imported');
+      if (res && res.updated !== undefined) counts.push(res.updated + ' updated');
+      if (res && res.skipped !== undefined) counts.push(res.skipped + ' skipped');
+      var hasErrors = res && Array.isArray(res.errors) && res.errors.length > 0;
+      S.toast('Import complete' + (counts.length ? ' · ' + counts.join(' · ') : '') + '.', hasErrors ? 'warn' : 'ok');
+    } catch (err) {
+      el.importError.textContent = (err && err.message) || 'Import failed.';
+      S.toast((err && err.message) || 'Import failed.', 'err');
+    } finally {
+      el.importBtn.disabled = false;
+      el.importBtn.classList.remove('is-busy');
     }
   }
 
@@ -655,6 +875,17 @@
       el.agentGreeting.addEventListener('input', markAgentDirty);
       el.agentGreeting.addEventListener('change', markAgentDirty);
     }
+    if (el.importAdapter) {
+      el.importAdapter.addEventListener('change', function () {
+        el.importFile.value = '';
+        el.importFileName.textContent = 'No file selected';
+        el.importResult.hidden = true;
+        updateImportMode();
+      });
+    }
+    if (el.importFile) el.importFile.addEventListener('change', loadImportFile);
+    if (el.importSampleBtn) el.importSampleBtn.addEventListener('click', loadImportSample);
+    if (el.importForm) el.importForm.addEventListener('submit', runImport);
 
     el.catalogList.addEventListener('input', function (e) {
       var row = e.target && e.target.closest ? e.target.closest('.product-row') : null;

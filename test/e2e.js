@@ -1595,6 +1595,243 @@ async function main() {
     near(p1.negotiation.auto_accept, 237, 'p1 auto_accept after reset');
     return `3 pages 200 with markers; reset restored 5 index items + p1 204/237`;
   });
+
+  // =========================================================================
+  // v5 — index feed + adapter layer (INDEX-FEED-SPEC.md / ADAPTER-SPEC.md)
+  // =========================================================================
+  await reset();
+  const PRIVATE_KEYS = ['sell_min', 'sell_max', 'auto_accept'];
+
+  function assertNoPrivate(obj, label) {
+    const blob = JSON.stringify(obj);
+    for (const f of PRIVATE_KEYS) {
+      assert(!blob.includes(`"${f}"`), `PRIVATE RANGE LEAK: "${f}" in ${label}`, {
+        context: (blob.match(new RegExp(`.{0,80}"${f}".{0,80}`)) || [''])[0].slice(0, 240),
+      });
+    }
+  }
+
+  await test('T72', 'v5 GET /api/adapters → registry (inventory/agents/checkout, statuses)', async () => {
+    const r = await get('/api/adapters');
+    eq(r.status, 200, 'status');
+    hasKeys(r.json, ['schema_version', 'inventory', 'agents', 'checkout'], 'adapters registry');
+    assert(/settled-adapters\/1\.0/.test(String(r.json.schema_version)), `schema_version: expected settled-adapters/1.0, got ${JSON.stringify(r.json.schema_version)}`);
+    for (const group of ['inventory', 'agents', 'checkout']) {
+      const list = r.json[group];
+      assert(Array.isArray(list) && list.length > 0, `${group} must be a non-empty array`);
+      for (const a of list) {
+        hasKeys(a, ['id', 'name', 'mode', 'status'], `${group} adapter`);
+        assert(typeof a.id === 'string' && a.id.length > 0, `${group} adapter id must be a non-empty string`);
+        assert(['ready', 'roadmap'].includes(a.status), `${group}/${a.id}.status: expected ready|roadmap, got ${JSON.stringify(a.status)}`);
+      }
+    }
+    const ids = (group) => r.json[group].map((a) => a.id);
+    for (const id of ['csv', 'json', 'shopify', 'woocommerce', 'feed']) {
+      assert(ids('inventory').includes(id), `inventory registry missing adapter "${id}" (has: ${ids('inventory').join(', ')})`);
+    }
+    for (const a of r.json.inventory) eq(a.status, 'ready', `inventory/${a.id} must be ready`);
+    for (const id of ['rest', 'mcp', 'a2a']) assert(ids('agents').includes(id), `agents registry missing "${id}"`);
+    const agentStatus = Object.fromEntries(r.json.agents.map((a) => [a.id, a.status]));
+    eq(agentStatus.rest, 'ready', 'agents/rest status');
+    eq(agentStatus.mcp, 'roadmap', 'agents/mcp status');
+    eq(agentStatus.a2a, 'roadmap', 'agents/a2a status');
+    for (const id of ['hosted', 'paypal-button', 'shopify-plugin', 'woocommerce-plugin']) {
+      assert(ids('checkout').includes(id), `checkout registry missing "${id}"`);
+    }
+    const checkoutStatus = Object.fromEntries(r.json.checkout.map((a) => [a.id, a.status]));
+    eq(checkoutStatus.hosted, 'ready', 'checkout/hosted status');
+    eq(checkoutStatus['paypal-button'], 'ready', 'checkout/paypal-button status');
+    eq(checkoutStatus['shopify-plugin'], 'roadmap', 'checkout/shopify-plugin status');
+    return `${r.json.inventory.length} inventory, ${r.json.agents.length} agents, ${r.json.checkout.length} checkout adapters`;
+  });
+
+  await test('T73', 'v5 manifest + feed pagination: unique union, final cursor null, no private ranges', async () => {
+    const man = await get('/api/index/manifest');
+    eq(man.status, 200, 'manifest status');
+    hasKeys(man.json, ['schema_version', 'generated_at', 'totals', 'categories', 'endpoints'], 'manifest');
+    assert(/settled-index\/1\.0/.test(String(man.json.schema_version)), `manifest.schema_version: got ${JSON.stringify(man.json.schema_version)}`);
+    assert(isIso(man.json.generated_at), `manifest.generated_at must be ISO, got ${JSON.stringify(man.json.generated_at)}`);
+    hasKeys(man.json.totals, ['merchants', 'categories', 'offers'], 'manifest.totals');
+    hasKeys(man.json.endpoints, ['feed', 'search', 'negotiate', 'openapi'], 'manifest.endpoints');
+    eq(String(man.json.endpoints.feed), '/api/index/feed', 'manifest.endpoints.feed');
+    assert(Array.isArray(man.json.categories), 'manifest.categories must be an array');
+    const idx = await get('/api/index');
+    const seedIds = (idx.json.items || []).map((i) => `${i.merchant.id}:${i.product.id}`).sort();
+    near(man.json.totals.offers, seedIds.length, 'manifest.totals.offers vs /api/index items');
+    eq(num(man.json.totals.merchants), 3, 'manifest.totals.merchants');
+    eq(num(man.json.totals.categories), man.json.categories.length, 'manifest.totals.categories');
+    for (const c of man.json.categories) hasKeys(c, ['id', 'name', 'count', 'min', 'max'], 'manifest category');
+
+    // Page through with limit=2 and collect the union.
+    const seen = [];
+    let cursor = null;
+    let pages = 0;
+    let last = null;
+    do {
+      const url = `/api/index/feed?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+      const page = await get(url);
+      eq(page.status, 200, `feed page ${pages + 1} status`);
+      hasKeys(page.json, ['schema_version', 'items', 'next_cursor'], `feed page ${pages + 1}`);
+      assert(/settled-index\/1\.0/.test(String(page.json.schema_version)), `feed.schema_version: got ${JSON.stringify(page.json.schema_version)}`);
+      assert(Array.isArray(page.json.items) && page.json.items.length <= 2, `feed page ${pages + 1}: expected <=2 items, got ${(page.json.items || []).length}`);
+      assert(page.json.items.length > 0, `feed page ${pages + 1} returned no items while next_cursor was non-null`);
+      for (const it of page.json.items) {
+        hasKeys(it, ['offer_id', 'merchant', 'product', 'published_range', 'terms', 'protection', 'negotiate_url', 'updated_at'], 'feed item');
+        eq(it.offer_id, `${it.merchant.id}:${it.product.id}`, 'feed item offer_id = merchant:product');
+        assert(isIso(it.updated_at), `feed item ${it.offer_id}.updated_at must be ISO`);
+        hasKeys(it.published_range, ['min', 'max'], 'feed item published_range');
+        seen.push(it.offer_id);
+        pages += 1;
+      }
+      assertNoPrivate(page.json, `feed page ${pages} (${url})`);
+      last = page.json;
+      cursor = page.json.next_cursor;
+      if (pages > 20) break;
+    } while (cursor !== null && cursor !== undefined);
+
+    eq(last.next_cursor, null, 'final feed page must have next_cursor null');
+    assert(new Set(seen).size === seen.length, `feed pagination returned duplicates: [${seen.join(', ')}]`);
+    eq(seen.slice().sort().join(','), seedIds.join(','), `feed union must equal /api/index offers (${seen.length} vs ${seedIds.length})`);
+    assertNoPrivate(man.json, 'index manifest');
+
+    const filtered = await get('/api/index/feed?category=audio&limit=50');
+    eq(filtered.status, 200, 'filtered feed status');
+    for (const it of filtered.json.items || []) eq(String(it.product.category).toLowerCase(), 'audio', 'feed category filter');
+    const byMerchant = await get('/api/index/feed?merchant=m1&limit=50');
+    for (const it of byMerchant.json.items || []) eq(it.merchant.id, 'm1', 'feed merchant filter');
+    return `${pages} feed items over ${Math.ceil(pages / 2)} page(s), no dupes, final cursor null, no private ranges`;
+  });
+
+  await test('T74', 'v5 agent-manifest + /.well-known/settled-agent.json + OpenAPI 3.0.3', async () => {
+    const am = await get('/api/agent-manifest');
+    eq(am.status, 200, 'agent-manifest status');
+    hasKeys(am.json, ['schema_version', 'name', 'endpoints', 'tools'], 'agent manifest');
+    assert(/settled-agent\/1\.0/.test(String(am.json.schema_version)), `agent schema_version: got ${JSON.stringify(am.json.schema_version)}`);
+    hasKeys(am.json.endpoints, ['manifest', 'feed', 'search', 'negotiate', 'auto', 'order', 'claim'], 'agent manifest endpoints');
+    eq(String(am.json.endpoints.manifest), '/api/index/manifest', 'agent endpoint manifest');
+    eq(String(am.json.endpoints.feed), '/api/index/feed', 'agent endpoint feed');
+    assert(Array.isArray(am.json.tools) && am.json.tools.length >= 7, `agent manifest tools: expected >=7, got ${JSON.stringify((am.json.tools || []).map((t) => t.name))}`);
+    const toolNames = am.json.tools.map((t) => t.name);
+    for (const n of ['index.manifest', 'index.feed', 'index.search', 'negotiate.start', 'negotiate.auto', 'order.create', 'claim.open']) {
+      assert(toolNames.includes(n), `agent tools missing "${n}" (has: ${toolNames.join(', ')})`);
+    }
+    for (const t of am.json.tools) hasKeys(t, ['name', 'endpoint'], 'agent tool');
+    assertNoPrivate(am.json, 'agent manifest');
+
+    const wk = await get('/.well-known/settled-agent.json');
+    eq(wk.status, 200, '/.well-known/settled-agent.json status');
+    assert(/json/i.test(wk.contentType), `well-known content-type: expected JSON, got ${wk.contentType}`);
+    hasKeys(wk.json, ['schema_version', 'endpoints'], 'well-known agent manifest');
+    eq(wk.json.schema_version, am.json.schema_version, 'well-known schema_version matches /api/agent-manifest');
+
+    const oa = await get('/api/index/openapi.json');
+    eq(oa.status, 200, 'openapi status');
+    hasKeys(oa.json, ['openapi', 'info', 'paths'], 'openapi document');
+    assert(/^3\.0/.test(String(oa.json.openapi)), `openapi version: expected 3.0.x, got ${JSON.stringify(oa.json.openapi)}`);
+    hasKeys(oa.json.info, ['title', 'version'], 'openapi info');
+    const paths = Object.keys(oa.json.paths || {});
+    for (const want of ['/api/index/manifest', '/api/index/feed', '/api/index', '/api/contracts', '/api/orders']) {
+      assert(paths.includes(want), `openapi paths missing ${want} (has: ${paths.join(', ')})`);
+    }
+    const all = paths.join(' ');
+    assert(/\/api\/contracts\/\{[^}]+\}\/ai-auto/.test(all), `openapi missing /api/contracts/{id}/ai-auto path (has: ${all})`);
+    assert(/\/api\/orders\/\{[^}]+\}\/claim/.test(all), `openapi missing /api/orders/{id}/claim path (has: ${all})`);
+    assertNoPrivate(oa.json, 'openapi document');
+    return `agent-manifest ${am.json.tools.length} tools; well-known ok; openapi ${oa.json.openapi} with ${paths.length} paths`;
+  });
+
+  await test('T75', 'v5 catalog import: CSV, JSON, Shopify, Woo, upsert, invalid 400, reset', async () => {
+    const importPayload = (m, body) => http('POST', `/api/merchants/${m}/catalog/import`, { body });
+
+    const csv = 'sku,name,price,category,description\nIMP-CSV-1,"Imported, Quoted Lamp",59,Lighting,Csv lamp\nIMP-CSV-2,Imported Plain Lamp,69,Lighting,Csv plain';
+    const r1 = await importPayload('m2', { adapter: 'csv', data: csv });
+    eq(r1.status, 200, 'csv import status');
+    hasKeys(r1.json, ['adapter', 'imported', 'updated', 'skipped', 'products', 'errors'], 'csv import response');
+    eq(r1.json.adapter, 'csv', 'csv adapter echo');
+    assert((r1.json.imported || 0) >= 2, `csv import: expected >=2 imported, got ${JSON.stringify(r1.json.imported)}`);
+    assert(Array.isArray(r1.json.errors) && r1.json.errors.length === 0, `csv import errors: ${JSON.stringify(r1.json.errors)}`);
+    const cat1 = await get('/api/merchants/m2/catalog');
+    const quoted = (cat1.json.products || []).find((p) => p.name === 'Imported, Quoted Lamp');
+    assert(quoted, `quoted CSV name not normalized; names: ${(cat1.json.products || []).map((p) => p.name).join(' | ')}`);
+    near(quoted.price, 59, 'imported quoted lamp price');
+
+    const r2 = await importPayload('m2', { adapter: 'json', data: { products: [{ sku: 'IMP-JSON-1', name: 'Imported JSON Lamp', price: 79, category: 'Lighting', description: 'json lamp' }] } });
+    eq(r2.status, 200, 'json import status');
+    assert((r2.json.imported || 0) >= 1, `json import: expected >=1 imported, got ${JSON.stringify(r2.json.imported)}`);
+
+    const r3 = await importPayload('m2', {
+      adapter: 'shopify',
+      data: { products: [{ id: 9001, title: 'Imported Shopify Lamp', variants: [{ price: '89.00', sku: 'IMP-SHOP-1' }], product_type: 'Lighting', body_html: '<p>Shop lamp</p>' }] },
+    });
+    eq(r3.status, 200, 'shopify import status');
+    assert((r3.json.imported || 0) >= 1, `shopify import: expected >=1 imported, got ${JSON.stringify(r3.json.imported)}`);
+
+    const r4 = await importPayload('m2', {
+      adapter: 'woocommerce',
+      data: { products: [{ id: 9002, name: 'Imported Woo Lamp', price: '99', sku: 'IMP-WOO-1', categories: [{ name: 'Lighting' }], description: 'woo lamp' }] },
+    });
+    eq(r4.status, 200, 'woo import status');
+    assert((r4.json.imported || 0) >= 1, `woo import: expected >=1 imported, got ${JSON.stringify(r4.json.imported)}`);
+
+    // imported inventory must be visible to the public index
+    const idx = await get('/api/index?merchant=m2');
+    eq(idx.status, 200, 'index status');
+    const names = (idx.json.items || []).map((i) => i.product.name);
+    for (const want of ['Imported, Quoted Lamp', 'Imported JSON Lamp', 'Imported Shopify Lamp', 'Imported Woo Lamp']) {
+      assert(names.includes(want), `imported product "${want}" missing from /api/index (has: ${names.join(' | ')})`);
+    }
+    assertNoPrivate(idx.json, '/api/index after import');
+
+    // upsert by sku: change price, no duplicate
+    const countBefore = (cat1.json.products || []).length;
+    const r5 = await importPayload('m2', { adapter: 'csv', data: 'sku,name,price,category\nIMP-CSV-2,Imported Plain Lamp,74,Lighting' });
+    eq(r5.status, 200, 'upsert import status');
+    const cat2 = await get('/api/merchants/m2/catalog');
+    const upserted = (cat2.json.products || []).find((p) => p.name === 'Imported Plain Lamp');
+    assert(upserted, 'upserted product missing');
+    near(upserted.price, 74, 'upsert must update the price by sku');
+    assert((cat2.json.products || []).length >= countBefore, 'upsert must not remove products');
+
+    // unknown adapter → 400
+    const bad = await importPayload('m2', { adapter: 'does-not-exist', data: {} });
+    const badDetail = assertErrorShape(bad, 400, 'invalid adapter');
+    // No data supplied: either a clean 400 or a 200 that imports nothing. Never a crash or a phantom product.
+    const missing = await importPayload('m2', { adapter: 'json' });
+    if (missing.status === 200) {
+      assert((missing.json.imported || 0) === 0 && (missing.json.updated || 0) === 0,
+        `import with no data must not import anything, got imported=${missing.json.imported} updated=${missing.json.updated}`);
+    } else {
+      assertErrorShape(missing, 400, 'missing import data');
+    }
+
+    // reset wipes imported inventory
+    await reset();
+    const cat3 = await get('/api/merchants/m2/catalog');
+    eq((cat3.json.products || []).length, 2, 'reset must restore m2 to 2 seed products');
+    assert(!(cat3.json.products || []).some((p) => String(p.name).startsWith('Imported')), 'imported products must be gone after reset');
+    const idxReset = await get('/api/index');
+    eq((idxReset.json.items || []).length, 5, 'index after reset must list 5 seed items');
+    return `csv(2)+json+shopify+woo imported, visible in index, upsert by sku, ${badDetail}; reset restored seed`;
+  });
+
+  await test('T76', 'v5 market.html "For indexers" + merchant.html "Import catalog"', async () => {
+    const market = await get('/market.html');
+    eq(market.status, 200, 'market.html status');
+    assert(/for indexers/i.test(market.text), `market.html must contain a "For indexers" panel; got ${market.text.length}B`);
+    assert(/manifest/i.test(market.text), 'market.html must reference the manifest');
+    assert(/\/api\/index\/feed/.test(market.text) || /feed/i.test(market.text), 'market.html must reference the feed');
+
+    const merchant = await get('/merchant.html');
+    eq(merchant.status, 200, 'merchant.html status');
+    assert(/import catalog/i.test(merchant.text), `merchant.html must contain "Import catalog"; got ${merchant.text.length}B`);
+    assert(/csv/i.test(merchant.text) && /shopify/i.test(merchant.text), 'merchant.html must offer CSV + Shopify adapter options');
+    assert(/woo/i.test(merchant.text), 'merchant.html must offer the WooCommerce adapter');
+
+    await reset();
+    const idx = await get('/api/index');
+    eq((idx.json.items || []).length, 5, 'final reset must restore 5 index items');
+    return `market.html (${market.text.length}B) + merchant.html (${merchant.text.length}B) markers ok; seed restored`;
+  });
 }
 
 // ---------------------------------------------------------------------------

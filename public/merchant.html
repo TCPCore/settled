@@ -84,6 +84,43 @@
 .add-note{font:600 8.5px/1.5 var(--mono);color:var(--muted-2);max-width:60ch}
 .add-error{font:600 9px var(--mono);color:var(--danger);margin-top:8px;min-height:0}
 
+/* import catalog */
+.import-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:14px;padding:14px 16px 16px}
+.import-form{display:flex;flex-direction:column;gap:9px;min-width:0}
+.import-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.import-field .field-label{display:flex;align-items:center;justify-content:space-between;gap:8px;font:600 8px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted-2)}
+.import-form .input{width:100%;min-width:0;background:#081120;border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:8px 9px;font-size:11px;line-height:1.4;transition:.15s;color-scheme:dark}
+.import-form .input:hover{border-color:var(--line-2)}
+.import-form .input:focus{outline:none;border-color:var(--emerald-line);box-shadow:0 0 0 2px rgba(43,217,160,.1)}
+.import-form textarea.input{min-height:88px;resize:vertical;font-family:var(--mono);font-size:9.5px;line-height:1.55}
+.import-hint{font:600 8.5px/1.5 var(--mono);color:var(--muted-2);min-height:13px}
+.import-file{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.import-file-name{font:600 8.5px var(--mono);color:var(--muted-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.import-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:2px}
+.import-note{font:600 8px/1.5 var(--mono);color:var(--muted-2);max-width:60ch}
+.import-error{font:600 9px/1.5 var(--mono);color:var(--danger);min-height:0}
+.import-result{border:1px solid var(--emerald-line);border-radius:9px;background:rgba(43,217,160,.04);padding:10px 11px}
+.import-result-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font:700 9px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--emerald)}
+.import-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}
+.import-metrics div{border:1px solid rgba(29,44,68,.7);border-radius:7px;background:rgba(8,16,29,.55);padding:7px 8px}
+.import-metrics span{display:block;font:600 7.5px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted-2)}
+.import-metrics b{display:block;font:700 15px var(--mono);color:var(--ink);margin-top:2px}
+.import-errors{margin:8px 0 0;padding-left:14px;font:600 8.5px/1.5 var(--mono);color:#FFB3B3;max-height:140px;overflow:auto}
+.import-result-foot{margin-top:8px;font:600 8px var(--mono);color:var(--muted-2)}
+.adapter-side{border:1px solid var(--line);border-radius:9px;background:rgba(8,16,29,.45);padding:10px 11px;min-width:0;align-self:start}
+.adapter-side-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font:700 8px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);padding-bottom:7px;border-bottom:1px solid rgba(29,44,68,.5)}
+.adapter-list{display:flex;flex-direction:column;gap:0}
+.adapter-row{display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid rgba(29,44,68,.38);min-width:0}
+.adapter-row:last-child{border-bottom:0}
+.adapter-row-body{min-width:0;flex:1}
+.adapter-row-name{font:600 9px var(--mono);color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adapter-row-mode{font:600 7px var(--mono);color:var(--muted-2);margin-top:2px;text-transform:uppercase;letter-spacing:.05em}
+.adapter-row .badge{flex:none}
+.adapter-payload{font:600 7.5px/1.35 var(--mono);color:var(--gold);margin-top:3px}
+.adapter-note{margin-top:8px;font:600 8px/1.55 var(--mono);color:var(--muted-2);border-top:1px solid rgba(29,44,68,.5);padding-top:8px}
+.adapter-note b{color:var(--gold)}
+.import-loading{font:600 8.5px var(--mono);color:var(--muted-2);padding:8px 0}
+
 /* side cards */
 .agent-profile{display:flex;align-items:center;gap:10px;padding:14px 15px;border-bottom:1px solid rgba(29,44,68,.75)}
 .agent-avatar-lg{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;font:750 11px var(--mono);color:var(--gold);border:1px solid var(--gold-line);background:var(--gold-dim)}
@@ -142,6 +179,9 @@
   .merchant-side{position:static}
   .pr-fields{grid-template-columns:1fr 1fr}
   .pr-group.policy{grid-column:1/-1}
+}
+@media (max-width:1000px){
+  .import-grid{grid-template-columns:1fr}
 }
 @media (max-width:860px){
   .merchant-hero{flex-direction:column;align-items:flex-start;gap:14px}
@@ -279,6 +319,68 @@
             </div>
             <div class="add-error" id="addError" role="alert"></div>
           </form>
+        </section>
+
+        <section class="panel" id="importPanel">
+          <div class="panel-head">
+            <div style="min-width:0">
+              <div class="panel-title">Import catalog <span class="badge" id="importAdapterBadge">adapters</span></div>
+              <div class="panel-sub">Bring inventory from a CSV/JSON export, a Shopify or WooCommerce product payload, or a remote JSON feed. Upserts by SKU/id.</div>
+            </div>
+            <span class="badge">POST /api/merchants/m1/catalog/import</span>
+          </div>
+          <div class="import-grid">
+            <form class="import-form" id="importForm" novalidate>
+              <div class="import-field">
+                <label class="field-label" for="importAdapter">Adapter</label>
+                <select class="input" id="importAdapter">
+                  <option value="csv">CSV upload</option>
+                  <option value="json">JSON payload</option>
+                  <option value="shopify">Shopify product payload</option>
+                  <option value="woocommerce">WooCommerce product payload</option>
+                  <option value="feed">Remote JSON feed</option>
+                </select>
+              </div>
+              <div class="import-hint" id="importHint">Paste a CSV export or choose a file.</div>
+              <div class="import-field" id="importDataField">
+                <label class="field-label" for="importData"><span>Payload</span><span class="tiny muted" id="importDataHint">CSV text</span></label>
+                <textarea class="input" id="importData" rows="5" spellcheck="false" placeholder="sku,name,price,category,description"></textarea>
+              </div>
+              <div class="import-file" id="importFileWrap">
+                <input type="file" id="importFile" accept=".csv,text/csv" hidden>
+                <label class="btn btn-ghost btn-sm" for="importFile">Choose file</label>
+                <span class="import-file-name" id="importFileName">No file selected</span>
+                <button class="log-copy" type="button" id="importSampleBtn">Load sample</button>
+              </div>
+              <div class="import-field" id="importUrlField" hidden>
+                <label class="field-label" for="importUrl">Feed URL</label>
+                <input class="input" id="importUrl" type="url" placeholder="https://merchant.example/catalog.json" autocomplete="off">
+              </div>
+              <div class="import-actions">
+                <span class="import-note">Imported items keep derived private/public ranges until you tune them below.</span>
+                <button class="btn btn-primary btn-sm" id="importBtn" type="submit">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></svg>
+                  Import catalog
+                </button>
+              </div>
+              <div class="import-error" id="importError" role="alert"></div>
+              <div class="import-result" id="importResult" hidden>
+                <div class="import-result-head"><span>Import complete</span><span class="badge emerald" id="importResultAdapter">csv</span></div>
+                <div class="import-metrics">
+                  <div><span>Imported</span><b id="importedCount">0</b></div>
+                  <div><span>Updated</span><b id="updatedCount">0</b></div>
+                  <div><span>Skipped</span><b id="skippedCount">0</b></div>
+                </div>
+                <ul class="import-errors" id="importErrors" hidden></ul>
+                <div class="import-result-foot" id="importResultFoot">Catalog refreshed.</div>
+              </div>
+            </form>
+            <div class="adapter-side">
+              <div class="adapter-side-head"><span>Adapter registry</span><span class="badge" id="adapterCount">—</span></div>
+              <div class="adapter-list" id="adapterList"><div class="import-loading">Loading adapters…</div></div>
+              <div class="adapter-note">Shopify and WooCommerce are <b>payload adapters</b> today — paste an export; live OAuth app connectors are roadmap.</div>
+            </div>
+          </div>
         </section>
       </div>
 

@@ -189,6 +189,27 @@
     return (first + second).toUpperCase();
   }
 
+  function boardSlug(name) {
+    return String(name || 'other').toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'other';
+  }
+
+  function groupBoards(items) {
+    var order = [];
+    var map = {};
+    items.forEach(function (item) {
+      var p = item.product || {};
+      var m = item.merchant || {};
+      var slug = boardSlug(p.category || m.category || 'other');
+      if (!map[slug]) { map[slug] = { slug: slug, items: [] }; order.push(map[slug]); }
+      map[slug].items.push(item);
+    });
+    order.sort(function (a, b) { return a.slug.localeCompare(b.slug); });
+    return order;
+  }
+
+  function boardLabel(slug) { return 'r/' + slug; }
+
   function cardHtml(item) {
     var m = item.merchant || {};
     var p = item.product || {};
@@ -224,7 +245,7 @@
         '</div>' +
         '<div class="mkt-prow">' +
           '<h2 class="mkt-pname">' + esc(p.name || 'Product') + '</h2>' +
-          (category ? '<span class="badge mkt-pcat">' + esc(category) + '</span>' : '') +
+          (category ? '<span class="badge mkt-pcat" title="Board ' + esc(category) + '">' + esc(boardLabel(boardSlug(category))) + '</span>' : '') +
         '</div>' +
         (p.description ? '<p class="mkt-desc">' + esc(p.description) + '</p>' : '') +
         '<div class="mkt-price-row">' +
@@ -275,6 +296,10 @@
     if (state.merchantCount) {
       parts.push(state.merchantCount + ' merchant' + (state.merchantCount === 1 ? '' : 's'));
     }
+    if (!state.category && state.items.length) {
+      var boardCount = groupBoards(state.items).length;
+      parts.push(boardCount + ' board' + (boardCount === 1 ? '' : 's'));
+    }
     if (state.budget) {
       parts.push('<span class="budget-tag">under ' + money(Number(state.budget)) + '</span>');
     }
@@ -318,21 +343,42 @@
     }
     if (state.error) { renderError(state.error); return; }
     if (!state.items.length) { renderEmpty(); return; }
-    el.results.innerHTML = '<div class="mkt-grid">' + state.items.map(cardHtml).join('') + '</div>';
+    if (state.category) {
+      el.results.innerHTML =
+        '<section class="mkt-board" aria-label="Board ' + esc(boardLabel(boardSlug(state.category))) + '">' +
+          '<div class="mkt-board-head">' +
+            '<span class="mkt-board-name"><i>r/</i>' + esc(boardSlug(state.category)) + '</span>' +
+            '<span class="mkt-board-count">' + state.items.length + ' offer' + (state.items.length === 1 ? '' : 's') + '</span>' +
+            '<span class="mkt-board-line" aria-hidden="true"></span>' +
+          '</div>' +
+          '<div class="mkt-grid">' + state.items.map(cardHtml).join('') + '</div>' +
+        '</section>';
+    } else {
+      el.results.innerHTML = groupBoards(state.items).map(function (board) {
+        return '<section class="mkt-board" aria-label="Board ' + esc(boardLabel(board.slug)) + '">' +
+          '<div class="mkt-board-head">' +
+            '<span class="mkt-board-name"><i>r/</i>' + esc(board.slug) + '</span>' +
+            '<span class="mkt-board-count">' + board.items.length + ' offer' + (board.items.length === 1 ? '' : 's') + '</span>' +
+            '<span class="mkt-board-line" aria-hidden="true"></span>' +
+          '</div>' +
+          '<div class="mkt-grid">' + board.items.map(cardHtml).join('') + '</div>' +
+        '</section>';
+      }).join('');
+    }
     el.results.setAttribute('aria-busy', 'false');
   }
 
   function renderChips() {
-    var html = '<span class="mkt-chips-label">Category</span>' +
+    var html = '<span class="mkt-chips-label">Boards</span>' +
       '<button class="mkt-chip' + (state.category ? '' : ' is-active') + '" type="button" data-category="" aria-pressed="' + (state.category ? 'false' : 'true') + '">' +
-        '<span class="nm">All</span><span class="n">' + (state.categoriesTotal || 0) + '</span>' +
+        '<span class="nm">All boards</span><span class="n">' + (state.categoriesTotal || 0) + '</span>' +
       '</button>';
     state.categories.forEach(function (cat) {
       var id = String(cat.id || '').toLowerCase();
       if (!id) return;
       var active = state.category === id;
       html += '<button class="mkt-chip' + (active ? ' is-active' : '') + '" type="button" data-category="' + esc(id) + '" aria-pressed="' + (active ? 'true' : 'false') + '" title="' + esc(cat.name || id) + '">' +
-        '<span class="nm">' + esc(cat.name || id) + '</span>' +
+        '<span class="nm">' + esc(boardLabel(id)) + '</span>' +
         '<span class="n">' + (num(cat.count) != null ? num(cat.count) : 0) + '</span>' +
       '</button>';
     });
@@ -364,6 +410,92 @@
     if (document.activeElement !== el.budget) el.budget.value = String(clamped);
     el.hint.innerHTML = 'Showing products negotiable from ' + esc(money(clamped)) + ' or less ' +
       '<button class="mkt-budget-reset" type="button" data-action="reset-budget">Reset</button>';
+  }
+
+  // ------------------------------------------------- indexer / copy helper
+  function resolveUrl(value) {
+    try { return new URL(value, window.location.href).href; } catch (e) { return String(value || ''); }
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    var ok = false;
+    try { ta.select(); ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () {
+        if (fallbackCopy(text)) return undefined;
+        throw new Error('copy failed');
+      });
+    }
+    if (fallbackCopy(text)) return Promise.resolve();
+    return Promise.reject(new Error('copy failed'));
+  }
+
+  function flashCopied(btn, ok) {
+    var label = btn.querySelector('span');
+    var original = label ? label.textContent : '';
+    btn.classList.toggle('is-copied', ok);
+    if (label) label.textContent = ok ? 'Copied' : 'Try again';
+    var live = $('mktCopyStatus');
+    if (live) live.textContent = (btn.getAttribute('aria-label') || 'Value') + (ok ? ' copied to clipboard' : ' could not be copied');
+    clearTimeout(btn._copyTimer);
+    btn._copyTimer = setTimeout(function () {
+      btn.classList.remove('is-copied');
+      if (label) label.textContent = original;
+    }, 1500);
+  }
+
+  function handleCopy(btn) {
+    var targetSelector = btn.getAttribute('data-copy-target');
+    var text = '';
+    if (targetSelector) {
+      var target = document.querySelector(targetSelector);
+      text = target ? target.textContent : '';
+    } else {
+      text = resolveUrl(btn.getAttribute('data-copy') || '');
+    }
+    if (!text) return;
+    copyText(text).then(function () { flashCopied(btn, true); })
+      .catch(function () { flashCopied(btn, false); });
+  }
+
+  function setText(id, value) {
+    var node = $(id);
+    if (node && value) node.textContent = value;
+  }
+
+  function loadManifest() {
+    fetchJson('/api/index/manifest').then(function (manifest) {
+      if (!manifest) return;
+      var schema = manifest.schema_version || 'settled-index/1.0';
+      setText('mktSchemaBadge', schema);
+      var totals = manifest.totals || {};
+      var bits = [];
+      if (num(totals.offers) != null) bits.push(totals.offers + ' offers');
+      if (num(totals.merchants) != null) bits.push(totals.merchants + ' merchants');
+      if (num(totals.categories) != null) bits.push(totals.categories + ' boards');
+      if (bits.length) setText('mktManifestTotals', schema + ' · ' + bits.join(' · '));
+      var endpoints = manifest.endpoints || {};
+      var byKey = { manifest: '/api/index/manifest', feed: endpoints.feed, openapi: endpoints.openapi };
+      Array.prototype.forEach.call(document.querySelectorAll('[data-endpoint]'), function (code) {
+        var url = byKey[code.getAttribute('data-endpoint')];
+        if (!url) return;
+        code.textContent = url;
+        var btn = code.parentNode ? code.parentNode.querySelector('[data-copy]') : null;
+        if (btn) btn.setAttribute('data-copy', url);
+      });
+    }).catch(function () { /* static panel URLs stay as the fallback */ });
   }
 
   // ---------------------------------------------------------------- loading
@@ -522,6 +654,13 @@
     });
 
     el.budget.addEventListener('blur', function () { updateBudgetUi(); });
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-copy],[data-copy-target]');
+      if (!btn) return;
+      e.preventDefault();
+      handleCopy(btn);
+    });
   }
 
   function loadConfig() {
@@ -551,6 +690,7 @@
     updateBudgetUi();
     renderChips();
     loadConfig();
+    loadManifest();
     loadCategories();
     loadIndex();
   }

@@ -22,6 +22,7 @@ const passport = require('./lib/passport');
 const contracts = require('./lib/contract');
 const protection = require('./lib/protection');
 const catalog = require('./lib/catalog');
+const adapters = require('./lib/adapters');
 const ai = require('./lib/ai');
 
 /**
@@ -640,6 +641,7 @@ function handleListEvents(req, res, query) {
 
 function handleReset(req, res) {
   data.reset();
+  catalog.resetUpdated();
   seedLedgerEvents();
   sendJson(res, 200, { ok: true });
 }
@@ -845,6 +847,82 @@ async function handleCatalogUpdate(req, res, merchantId, productId) {
   sendJson(res, 200, catalog.updateProduct(merchantId, productId, body));
 }
 
+// --------------------------------------------------- adapters & index feed ---
+
+function handleAdapters(req, res) {
+  sendJson(res, 200, adapters.registry());
+}
+
+async function handleCatalogImport(req, res, merchantId) {
+  const body = await readJson(req);
+  sendJson(res, 200, await adapters.importInto(merchantId, body));
+}
+
+async function handleCatalogSync(req, res, merchantId) {
+  const body = await readJson(req);
+  sendJson(res, 200, await adapters.syncFrom(merchantId, body));
+}
+
+function handleIndexManifest(req, res) {
+  sendJson(res, 200, catalog.manifest());
+}
+
+function handleIndexFeed(req, res, query) {
+  sendJson(res, 200, catalog.feed({
+    cursor: query.get('cursor'),
+    limit: query.get('limit'),
+    category: query.get('category'),
+    merchant: query.get('merchant'),
+    updated_since: query.get('updated_since'),
+  }));
+}
+
+/** OpenAPI document served straight from public/index-openapi.json. */
+let openapiCache = null;
+function handleIndexOpenapi(req, res) {
+  if (!openapiCache) {
+    try {
+      openapiCache = fs.readFileSync(path.join(PUBLIC_DIR, 'index-openapi.json'), 'utf8');
+    } catch {
+      return fail(res, 500, 'OPENAPI_UNAVAILABLE', 'OpenAPI document not generated');
+    }
+  }
+  res.writeHead(200, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(openapiCache),
+    'Cache-Control': 'no-cache',
+  });
+  res.end(openapiCache);
+}
+
+/** Agent card for any personal AI (also served at /.well-known). */
+function handleAgentManifest(req, res) {
+  sendJson(res, 200, {
+    schema_version: 'settled-agent/1.0',
+    name: 'Settled',
+    description: 'PayPal merchant negotiation index and assurance layer',
+    auth: 'agent_passport+mandate',
+    endpoints: {
+      manifest: '/api/index/manifest',
+      feed: '/api/index/feed',
+      search: '/api/index',
+      negotiate: '/api/contracts',
+      auto: '/api/contracts/{id}/ai-auto',
+      order: '/api/merchants/{id}/orders',
+      claim: '/api/orders/{id}/claim',
+    },
+    tools: [
+      { name: 'index.manifest', endpoint: 'GET /api/index/manifest' },
+      { name: 'index.feed', endpoint: 'GET /api/index/feed' },
+      { name: 'index.search', endpoint: 'GET /api/index' },
+      { name: 'negotiate.start', endpoint: 'POST /api/contracts' },
+      { name: 'negotiate.auto', endpoint: 'POST /api/contracts/{id}/ai-auto' },
+      { name: 'order.create', endpoint: 'POST /api/merchants/{id}/orders' },
+      { name: 'claim.open', endpoint: 'POST /api/orders/{id}/claim' },
+    ],
+  });
+}
+
 // ------------------------------------------------------------ static files --
 const STATIC_ROUTES = {
   '/': { file: 'index.html', type: 'text/html; charset=utf-8' },
@@ -955,6 +1033,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // Agent card at the well-known location (outside the /api namespace).
+  if ((method === 'GET' || method === 'HEAD') && pathname === '/.well-known/settled-agent.json') {
+    return handleAgentManifest(req, res);
+  }
+
   // Static.
   if (method !== 'GET' && method !== 'HEAD') {
     return fail(res, 405, 'METHOD_NOT_ALLOWED', `${method} is not allowed on ${pathname}`);
@@ -987,8 +1070,10 @@ async function routeApi(req, res, method, pathname, query) {
       if (sub === 'catalog' && method === 'GET') return handleCatalogGet(req, res, id);
       if (sub === 'catalog' && method === 'POST') return handleCatalogCreate(req, res, id);
     }
-    if (seg.length === 5 && seg[3] === 'catalog' && method === 'PATCH') {
-      return handleCatalogUpdate(req, res, id, seg[4]);
+    if (seg.length === 5 && seg[3] === 'catalog') {
+      if (seg[4] === 'import' && method === 'POST') return handleCatalogImport(req, res, id);
+      if (seg[4] === 'sync' && method === 'POST') return handleCatalogSync(req, res, id);
+      if (method === 'PATCH') return handleCatalogUpdate(req, res, id, seg[4]);
     }
   }
 
@@ -1000,6 +1085,23 @@ async function routeApi(req, res, method, pathname, query) {
   // /api/index (negotiation index)
   if (seg.length === 2 && seg[1] === 'index' && method === 'GET') {
     return handleIndex(req, res, query);
+  }
+
+  // /api/index/manifest | feed | openapi.json  (machine-readable emission)
+  if (seg.length === 3 && seg[1] === 'index' && method === 'GET') {
+    if (seg[2] === 'manifest') return handleIndexManifest(req, res);
+    if (seg[2] === 'feed') return handleIndexFeed(req, res, query);
+    if (seg[2] === 'openapi.json') return handleIndexOpenapi(req, res);
+  }
+
+  // /api/adapters (inventory/agent/checkout registry)
+  if (seg.length === 2 && seg[1] === 'adapters' && method === 'GET') {
+    return handleAdapters(req, res);
+  }
+
+  // /api/agent-manifest (agent card)
+  if (seg.length === 2 && seg[1] === 'agent-manifest' && method === 'GET') {
+    return handleAgentManifest(req, res);
   }
 
   // /api/orders/:id/fulfill | claim

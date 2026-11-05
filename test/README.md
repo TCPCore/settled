@@ -70,7 +70,7 @@ If `server.js` is missing the suite exits `1` with `server.js not found … back
 | T35 | claim drains the merchant reserve, then the shortfall is paid from the network pool (reserve 900, 6 × 159 claims → 105 + 54) |
 | T36 | final cleanup reset (leaves seed state) |
 
-69 tests (37 base + 20 v2 + 6 v3 + 6 v4), ~8–11 s against a warm server. Last verified green: **69/69, exit 0** on a freshly spawned server (`PORT=4400 node test/e2e.js`) — the server is killed on exit and leaves no listener.
+74 tests (37 base + 20 v2 + 6 v3 + 6 v4 + 5 v5), ~9–13 s against a warm server. Last verified green: **74/74, exit 0** on a freshly spawned server (`PORT=4400 node test/e2e.js`) — the server is killed on exit and leaves no listener.
 
 ## v2 coverage — HACKATHON-DEMO-SPEC (agents, contracts, protection, demo)
 
@@ -118,6 +118,16 @@ If `server.js` is missing the suite exits `1` with `server.js not found … back
 | T69 | `PATCH /api/merchants/m1/catalog/p1` → `publish_min:220` persists, **index reflects** it; `publish_min < sell_min` and `auto_accept > sell_max` → 400; contract policy picks up patched `sell_min/auto_accept` (200/230); p1 restored to 204/237 |
 | T70 | p1 contract `list 249 / floor 204 / auto_accept 237`; `PATCH p2 {negotiable:false}` → p2 vanishes from `/api/index`; contract on p2 → **409 `PRODUCT_NOT_NEGOTIABLE`**; restore → p2 negotiable again |
 | T71 | `/merchant.html` ("Merchant agent setup" + catalog), `/market.html` ("The negotiation index"), `/negotiate.html` (negotiation + agent + pay) → 200 with markers; final reset restores 5 index items and p1 204/237 |
+
+## v5 coverage — INDEX-FEED-SPEC / ADAPTER-SPEC (feed, manifests, adapters, import)
+
+| Test | Covers |
+|---|---|
+| T72 | `GET /api/adapters` → `settled-adapters/1.0`; inventory (csv/json/shopify/woocommerce/feed, all `ready`), agents (rest `ready`, mcp/a2a `roadmap`), checkout (hosted + paypal-button `ready`, shopify-plugin + woocommerce-plugin `roadmap`); every entry `{id,name,mode,status}` |
+| T73 | `GET /api/index/manifest` (`settled-index/1.0`, ISO `generated_at`, `totals` matching `/api/index`, categories, endpoint URLs) + `GET /api/index/feed?limit=2` pagination: follows cursors to `next_cursor:null`, union equals the seed offers exactly once (no dupes/skips), every item has `offer_id` (= `merchant:product`), `published_range`, `updated_at`, `negotiate_url`; category/merchant filters; **no `sell_min`/`sell_max`/`auto_accept` in manifest, any feed page, or OpenAPI** |
+| T74 | `GET /api/agent-manifest` (`settled-agent/1.0`, endpoints, 7 tools incl. `index.manifest`/`negotiate.start`/`claim.open`), same document at `/.well-known/settled-agent.json` (served as JSON), and `GET /api/index/openapi.json` (3.0.x, info, the 7 documented paths incl. `/api/contracts/{id}/ai-auto` and `/api/orders/{id}/claim`) |
+| T75 | imports: CSV (incl. a quoted name with a comma), JSON, Shopify payload (`variants[].price`, `product_type`, `body_html`), WooCommerce payload (`categories[].name`); imported products appear in the merchant catalog **and** `/api/index`; upsert by `sku` updates price without duplicating; unknown adapter → 400; no-data import → 400 or a 200 that imports nothing; **reset wipes imported inventory** back to the 2+5 seed |
+| T76 | `/market.html` has the "For indexers" panel + manifest/feed references; `/merchant.html` has "Import catalog" + CSV/Shopify/Woo options; final reset restores 5 index items |
 
 ## Reading a failure
 
@@ -169,5 +179,16 @@ Every failure prints the assertion that broke and either the exact response body
 - **PATCH 400 code** is not frozen; T69 asserts the documented 400 status + `{error:{code,message}}` shape, not a specific code string (`INVALID_NEGOTIATION` on the current build).
 - **Merchant catalog may expose the full `negotiation` block** (private floor/ceiling) — §Data-model explicitly allows this for the prototype, so T67 only scans *public* endpoints (`/api/index`, `/api/categories`, `/api/merchants`, `/api/merchants/:id`), never `/api/merchants/:id/catalog`.
 - **`negotiable:false` also hides an item from the index** (§API: categories/index derive from listed+negotiable products); T70 asserts that as well as the 409.
+
+### v5 (INDEX-FEED-SPEC / ADAPTER-SPEC) ambiguities the suite resolves conservatively
+
+- **Cursors are opaque.** T73 never parses `next_cursor`; it passes the value straight back to the server and asserts the observable contract (every offer exactly once, final `null`). Any cursor encoding is acceptable.
+- **`next_cursor` on an empty page.** The suite fails if a page returns zero items while claiming a non-null cursor (that would stall a crawler).
+- **Feed paging is exercised with `limit=2`** against 5 seed offers, so pagination is genuinely multi-page; the loop is capped at 20 pages to avoid an infinite crawl on a bug.
+- **Import with no `data`** is not specified. T75 accepts a clean 400 *or* a 200 with `imported:0, updated:0` — it only rejects a 5xx or phantom products.
+- **Upsert semantics** are asserted by behaviour (`sku` match updates price, no duplicate row) rather than by exact `imported`/`updated` counters, since those can legitimately differ per adapter.
+- **OpenAPI path parameters** may be named anything (`{id}`, `{orderId}`); T74 matches the parameterised paths with a regex, not literal strings.
+- **`/.well-known/settled-agent.json`** is served outside `/api`, so it is checked for a JSON content type as well as shape.
+- **Reset must clear imported products**, not just orders/claims/contracts; T75/T76 assert the index returns to exactly 5 seed offers afterwards (this caught a real state-leak class of bug in mock testing).
 
 If the backend or spec changes, update the assertion and the corresponding row above; keep the `Tnn` ids stable so a failing demo check maps to a known behaviour.

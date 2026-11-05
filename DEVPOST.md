@@ -53,6 +53,13 @@ Try the 5-step console at `/demo.html`. It runs end to end with one click and en
 - Two AI surfaces: the negotiation transcript (labelled `AI` / `FALLBACK` in the demo) and the claim explainer that reviews evidence and drafts the rationale — with the rule engine keeping the final decision.
 - Deterministic fallback when no key/API error (`ai.used: false`), so the demo never dies on stage and judges can run it with no secrets.
 
+**Index + adapter layer (for any personal AI).**
+- `GET /api/index/manifest` → categories, totals, feed/search/OpenAPI endpoints.
+- `GET /api/index/feed?cursor=` → stable `offer_id`, `published_range`, `negotiate_url`, `updated_at`; opaque cursor, no private range.
+- `GET /api/index/openapi.json` (OpenAPI 3.0.3) and `GET /api/agent-manifest` (+ `/.well-known/settled-agent.json`) for any agent runtime.
+- Inventory adapters: CSV, JSON, Shopify payload, WooCommerce payload, remote JSON feed; upsert by SKU; `GET /api/adapters` lists ready vs roadmap.
+- `market.html` is the human/board view of the same feed; `/merchant.html` is where the merchant configures it.
+
 **Trust and settlement engine.**
 - HMAC-SHA256 merchant credential + SHA-256 hash-chained event log (tamper-evident, verifiable from the dashboard and the agent API).
 - Risk engine derives score → tier → fee bps → cap → payment mode from outcome metrics, not hardcoded values.
@@ -86,7 +93,7 @@ We would rather say this first.
 - AI negotiation that is genuinely constrained: same accepted price on the deterministic path, model-generated transcript when a key is present, no scenario where the model can exceed the mandate.
 - Real PayPal sandbox money path in the same app as the SIM fallback, with clean failures.
 - A working refund in ~1.2s that updates reserve, score and tier in the same screen — the moment the pitch turns on.
-- The full e2e suite passing locally with zero external dependencies: **69/69 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
+- The full e2e suite passing locally with zero external dependencies: **74/74 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
 
 ## What we learned
 

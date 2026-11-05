@@ -82,7 +82,7 @@ Append tests:
 Run on fresh :4400; report.
 
 ## Acceptance
-- `node --check` all JS; `npm test` ≥69/69.
+- `node --check` all JS; `npm test` ≥74/74.
 - Merchant console edits persist in memory and index reflects.
 - Generic negotiation page completes contract → SIM order → claim.
 - No private range in any public JSON.
