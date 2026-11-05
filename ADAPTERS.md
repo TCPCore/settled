@@ -37,7 +37,7 @@ Four surfaces, one data model:
 
 1. **Inventory adapters** — get products into a merchant catalog from whatever the merchant already has.
 2. **Indexer feed** — a stable, versioned, paginated emission of *public* offers for a central indexer to crawl.
-3. **Agent manifest** — the tool surface a personal AI (or MCP wrapper) discovers and calls.
+3. **Runtime adapters** — an agent manifest (REST + OpenAPI), a local **MCP server** (`mcp/server.js`) and an A2A-style discovery card, so any personal-AI runtime can connect without custom code.
 4. **Checkout adapters** — where the negotiated price is actually paid; today hosted + PayPal button, Shopify/Woo plugins on the roadmap.
 
 **The index is a discovery layer, not a marketplace.** It never holds funds, never sees a private floor, and every negotiation still happens directly against the merchant's own contract endpoint with the buyer agent's passport and mandate.
@@ -56,10 +56,11 @@ Status reflects **this repo** (prototype, in-memory). "Payload" means the platfo
 | `woocommerce` | inventory in | **ready (payload)** | `{adapter:"woocommerce", data:{products:[{id,name,price,sku,categories:[{name}],description}]}}` | Same caveat: payload, not a live plugin. |
 | `feed` | inventory in (pull) | **ready** | `{adapter:"feed", url:"https://merchant.example/catalog.json"}` | 5 s timeout; JSON array or `{products}`; production needs an allowlist. Private range fields are applied only if the remote payload explicitly supplies them — production feeds should be treated as untrusted and stripped. |
 | `rest` | agents in | **ready** | HTTP JSON | `GET` manifest/feed/search, `POST` contracts/orders/claim. OpenAPI 3.0.3 at `/api/index/openapi.json`. |
-| `mcp` | agents in | **roadmap** | MCP tools | `index.manifest`, `index.feed`, `index.search`, `negotiate.start`, `negotiate.auto`, `order.create`, `claim.open`. |
-| `a2a` | agents in | **roadmap** | A2A agent card | Offer items already carry the merchant agent name (`merchant.agent`) and `negotiate_url`; the A2A card format and task lifecycle are not built. |
+| `mcp` | agents in | **ready locally** | stdio MCP (JSON-RPC 2.0) | `mcp/server.js` exposes 7 tools (`index_manifest`, `index_feed`, `index_search`, `negotiate_start`, `negotiate_auto`, `order_create`, `claim_open`). The registry still marks `mcp` **roadmap** because the REST API does not serve MCP remotely; remote MCP + auth is the next step. |
+| `a2a` | agents in | **discovery only** | A2A-style card | `GET /.well-known/agent-card.json` and `GET /api/a2a/agent-card` advertise skills (negotiate/verify/claim); full A2A task lifecycle, streaming and push are **roadmap**. Offer items also carry the merchant agent name and `negotiate_url`. |
 | `hosted` | checkout out | **ready** | Browser flow | `/negotiate.html?merchant=…&product=…` — contract → order → claim. SIM by default, live PayPal sandbox when configured. |
 | `paypal-button` | checkout out | **ready** | PayPal JS SDK | Server creates the order at the agreed amount; the SDK button approves/captures. Live mode only. |
+| `widget` | checkout out | **ready** | `<script>` tag | `public/settled-widget.js` — one-line install on any storefront; opens hosted `/negotiate.html` with `data-merchant`/`data-product`; no price logic and no payment code in the widget. |
 | `shopify-plugin` | checkout out | **roadmap** | Cart / draft order | Per the platform research, Shopify checkout is platform-authoritative: a real connector needs a discount function + theme app extension (Plus for line reprice), not a naive price patch. |
 | `woocommerce-plugin` | checkout out | **roadmap** | Cart filters | PHP plugin would own the cart total; not built in this repo. |
 
@@ -202,7 +203,47 @@ Unknown fields are ignored; unknown ids are `404`, contract/agent mismatches are
 
 ---
 
-## 6. Privacy
+## 6. Runtime adapters — MCP server, A2A card, drop-in widget
+
+Three ways a personal-AI runtime or a storefront connects without custom integration work. All of them are thin: none holds price logic, private ranges or funds.
+
+### MCP server (`mcp/server.js`)
+
+Zero-dependency **stdio JSON-RPC 2.0**; proxies to the REST API at `SETTLED_BASE_URL` (default `http://127.0.0.1:4173`). stdout is protocol only; logs go to stderr.
+
+```bash
+node server.js &                                  # API up
+node mcp/server.js                                # MCP over stdio
+```
+
+Claude Desktop / Cursor:
+
+```json
+{"mcpServers":{"settled":{"command":"node","args":["/abs/path/settled/mcp/server.js"],"env":{"SETTLED_BASE_URL":"http://127.0.0.1:4173"}}}}
+```
+
+Tools: `index_manifest`, `index_feed`, `index_search`, `negotiate_start`, `negotiate_auto`, `order_create`, `claim_open`. It is **local stdio with no remote auth** — a remote MCP deployment (HTTP/SSE + OAuth) is roadmap.
+
+### A2A-style agent card
+
+```bash
+curl -s http://127.0.0.1:4173/.well-known/agent-card.json | python3 -m json.tool
+curl -s http://127.0.0.1:4173/api/a2a/agent-card | python3 -m json.tool
+```
+
+Advertises `protocolVersion`, capabilities (no streaming/push), and the `negotiate` / `verify` / `claim` skills. **Honest label:** discovery card only — not full A2A protocol support.
+
+### Drop-in widget (`public/settled-widget.js`)
+
+```html
+<script src="/settled-widget.js" data-merchant="m1" data-product="p1" data-label="Negotiate with AI"></script>
+```
+
+Options: `data-position="bottom-right|bottom-left"`, `data-theme="dark|light"`, `data-inline="true"`. It renders a button that opens `/negotiate.html?merchant=…&product=…` in a new tab — no private data, no payment code, no external assets. `/embed-demo.html` shows the one-line install on a faux storefront with a "what happened" panel.
+
+---
+
+## 7. Privacy
 
 - **The private floor never leaves the server.** `publicProduct()` strips `sell_min`, `sell_max`, `auto_accept`; the index emits only `published_range` (the merchant's chosen public "from" price).
 - **The feed is public on purpose** (demo sandbox); in production it is the merchant's *published* offer, not its reservation price. A discount can go below `publish_min` only if the merchant configured it — the buyer never learns the true floor.
@@ -210,7 +251,7 @@ Unknown fields are ignored; unknown ids are `404`, contract/agent mismatches are
 - **Prototype gap:** the demo has no auth on the index or import endpoints. Production needs merchant auth on import, an allowlist for remote `feed` pulls, agent passport/mandate on contract creation, and signed index requests.
 - **No bulk scraping contract yet** — the demo feed is open; the production posture is per-agent rate limits, ETag/If-None-Match, and no full-history dumps.
 
-## 7. Production notes
+## 8. Production notes
 
 - **Caching / ETag** — serve the manifest and feed with `ETag`; clients send `If-None-Match` and get `304` on no change. The demo build does not send ETags yet (roadmap). Cache manifest for ~60 s, feed pages for a few seconds.
 - **Rate limits** — per-token/per-agent on `/api/index/feed` and `/api/contracts`; expensive paths (`ai-auto`) should be budgeted per agent, since each call is an LLM round-trip. No unbounded crawl.
@@ -220,7 +261,7 @@ Unknown fields are ignored; unknown ids are `404`, contract/agent mismatches are
 - **In-memory store** — this prototype resets on restart and runs single-process. Production: durable catalog + feed index, `updated_at` from a real write path, object storage for snapshots.
 - **Versioning** — `settled-index/1.0`, `settled-adapters/1.0`, `settled-agent/1.0`; additive changes only within a minor version, breaking changes bump the major and keep the old endpoint for a deprecation window.
 
-## 8. Try it in 60 seconds
+## 9. Try it in 60 seconds
 
 ```bash
 cd settled && node server.js          # http://127.0.0.1:4173
@@ -246,4 +287,4 @@ UI: `/merchant.html` (import panel), `/market.html` (For indexers panel), `/nego
 
 ---
 
-*Status honesty: inventory adapters and the indexer/agent surface are the prototype's build target for the hackathon; live OAuth connectors (Shopify/Woo apps), MCP/A2A packaging, and production auth/ETag/rate limits are roadmap. Nothing here moves money by default — checkout is SIM unless PayPal sandbox credentials are configured.*
+*Status honesty: inventory adapters, the index feed/manifest/OpenAPI, a local stdio MCP server, an A2A-style discovery card and the drop-in widget ship in this repo; live OAuth connectors (Shopify/Woo apps), cart-price plugins, remote MCP with auth, full A2A, and production auth/ETag/rate limits are roadmap. Nothing here moves money by default — checkout is SIM unless PayPal sandbox credentials are configured.*
