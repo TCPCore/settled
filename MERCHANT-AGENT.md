@@ -87,14 +87,58 @@ A merchant-scoped agent with **tools**, not an open-ended chatbot:
   "currency": "USD",
   "category": "audio",
   "negotiable": true,
-  "floor_pct": 0.82,
+  "sell_range": { "min": 204, "max": 249 },   // merchant's private sell range
+  "published_range": { "min": 214, "max": 249 }, // what the index shows
   "auto_accept_pct": 0.95,
   "max_discount_pct": 18,
   "terms": { "delivery_days": 3, "returns_days": 30, "warranty_months": 12 },
   "protection_tier": "A"
 }
 ```
-The **floor is never exposed** to the buyer agent; the server only emits accepted/countered decisions.
+
+**The floor is never exposed** to the buyer agent; the server only emits accepted/countered decisions. The index shows a **published range**, not the private floor — see §4.1.
+
+### 4.1 The Negotiation Index (demand side)
+
+A browsable, agent-readable index of everything merchants have opened for negotiation:
+
+- **Categories** (top-level + merchant subcategories): audio, home, electronics, apparel, etc.
+- **Per item:** merchant, title, category, list price, **published price range**, trust tier/score, protection bps/cap, terms, availability, `negotiate_url`.
+- **Filters:** category, budget, merchant, trust tier, delivery window, protection mode.
+- **Consumer AI API / MCP:** `index.search({category, budget, query})` → items → `negotiate.start`.
+- **Merchant console:** opt an item/category into the index; set the **sell range** (private) and the **published range** (public); the index is the shop window, the floor stays server-side.
+
+**The pricing trap to avoid:** if the published range starts at the merchant's true floor, the first buyer agent offers that number and all negotiation is gone. Keep:
+- `sell_range.min` = private floor (never published),
+- `published_range.min` = a rounded, coarsened "from" price above the floor (or "offers welcome" if the merchant prefers),
+- `published_range.max` = the ask/list price (or a rounded ceiling).
+
+The index can also show "from $X" (no ceiling) so the agent knows the item is negotiable without learning the reservation price.
+
+**Index item response:**
+```json
+{
+  "merchant": { "id": "m1", "name": "Northwind Audio", "tier": "A", "score": 91 },
+  "sku": "AURORA-ONE",
+  "title": "Aurora One headphones",
+  "category": "audio",
+  "list_price": 249,
+  "published_range": { "min": 214, "max": 249 },
+  "protection": { "fee_bps": 35, "cap": 5000, "mode": "instant" },
+  "terms": { "delivery_days": 3, "returns_days": 30 },
+  "negotiate_url": "/negotiate.html?merchant=m1&sku=AURORA-ONE"
+}
+```
+
+**Endpoints:**
+- `GET /api/index?category=audio&budget=300&q=headphones&limit=20`
+- `GET /api/categories` → category tree + negotiable item counts + published ranges
+- `GET /api/merchants/:id/catalog` → merchant view with sell range + published range
+- `PATCH /api/merchants/:id/catalog/:sku` → update negotiable, ranges, terms, protection
+
+**Guardrails:** only passport-verified agents; rate limits; no bulk scraping; category-level opt-in; merchant can hide the range entirely ("offers welcome"); MAP/channel rules respected; anti-arbitrage detection; every index call logged.
+
+**Why it matters:** the index is the discovery layer that makes both sides show up. Merchants publish what is negotiable; personal AIs search by category and budget; PayPal owns the neutral index between them. More merchants → more agent demand → more merchants.
 
 ---
 
