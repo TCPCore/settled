@@ -149,14 +149,14 @@
     setMode(state.liveMode ? 'live' : 'sim');
     updateAiBadge();
     var toggle = document.getElementById('aiEnabled');
-    if (toggle) toggle.checked = state.aiEnabled;
+    if (toggle) toggle.checked = true; // always start with agent dialogue; fallback renders deterministic messages
     var hint = document.getElementById('aiHint');
     if (hint) {
       hint.textContent = state.aiEnabled
         ? (state.aiModel || 'AI enabled')
-        : 'fallback · no AI key';
+        : 'fallback · deterministic agent dialogue';
     }
-    syncAiEndpoint(state.aiEnabled);
+    syncAiEndpoint(true);
   }
 
   function syncAiEndpoint(useAi) {
