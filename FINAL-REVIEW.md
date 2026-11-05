@@ -21,7 +21,7 @@
 | **AI** | Ollama Cloud `gpt-oss:20b`; one-call negotiation plan; claim explainer; policy clamps prices; fallback without keys |
 | **Trust engine** | HMAC-SHA256 credential, SHA-256 hash-chained event log, risk tiers 35/90/150 bps, reserve accounting, instant claims |
 | **Tests** | `npm test` → **78/78**, including PayPal SIM create/capture/refund and AI fallback |
-| **Repo** | public MIT repo: https://github.com/TCPCore/bit-settled |
+| **Repo** | public MIT repo: https://github.com/cptlight/bit-settled |
 | **Deployable demo** | `Dockerfile`, `render.yaml`, `DEPLOY.md`; `/integrate.html`; private SIM tunnel for testing (unlisted) |
 | **Narrative** | [WRITEUP.md](WRITEUP.md), [JUDGE-BRIEF.md](JUDGE-BRIEF.md), [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md), [HACKATHON-PROOF.md](HACKATHON-PROOF.md) |
 
@@ -156,7 +156,7 @@ Typical rubric: **technical implementation, design, potential impact, innovation
 - **Local live instance** on `:4173` with PayPal sandbox + Ollama Cloud (private).
 
 ### Recommended submission host — Render
-1. Render → New → **Blueprint** → connect `TCPCore/bit-settled` → `render.yaml` creates `settled-demo` (free).
+1. Render → New → **Blueprint** → connect `cptlight/bit-settled` → `render.yaml` creates `settled-demo` (free).
 2. Keep the public service **SIM only**: `PAYPAL_LIVE=0`, `AI_PROVIDER=none`.
 3. Open the URL repeatedly during testing; do **not** link it publicly until the submission is ready.
 4. For a private live test, duplicate the service and add keys in the Render dashboard (never in `render.yaml`).

@@ -4,7 +4,7 @@ The app is a single zero-dependency Node process. Public judges get **SIM mode**
 
 ## Option A — Render (recommended, one click)
 
-1. Push the repo (already done): https://github.com/TCPCore/bit-settled
+1. Push the repo (already done): https://github.com/cptlight/bit-settled
 2. Render → **New → Blueprint** → connect the repo. `render.yaml` creates a free web service named `settled-demo`.
 3. Wait for the first deploy; open `https://settled-demo.onrender.com/demo.html`.
 4. **Do not publish the URL** until the submission is ready. Render URLs are unlisted unless linked.
