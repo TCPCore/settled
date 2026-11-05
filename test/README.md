@@ -70,7 +70,7 @@ If `server.js` is missing the suite exits `1` with `server.js not found … back
 | T35 | claim drains the merchant reserve, then the shortfall is paid from the network pool (reserve 900, 6 × 159 claims → 105 + 54) |
 | T36 | final cleanup reset (leaves seed state) |
 
-74 tests (37 base + 20 v2 + 6 v3 + 6 v4 + 5 v5), ~9–13 s against a warm server. Last verified green: **74/74, exit 0** on a freshly spawned server (`PORT=4400 node test/e2e.js`) — the server is killed on exit and leaves no listener.
+78 tests (37 base + 20 v2 + 6 v3 + 6 v4 + 5 v5 + 4 v6), ~11–16 s against a warm server. Last verified green: **78/78, exit 0** on a freshly spawned server (`PORT=4400 node test/e2e.js`) — the server is killed on exit and leaves no listener.
 
 ## v2 coverage — HACKATHON-DEMO-SPEC (agents, contracts, protection, demo)
 
@@ -128,6 +128,15 @@ If `server.js` is missing the suite exits `1` with `server.js not found … back
 | T74 | `GET /api/agent-manifest` (`settled-agent/1.0`, endpoints, 7 tools incl. `index.manifest`/`negotiate.start`/`claim.open`), same document at `/.well-known/settled-agent.json` (served as JSON), and `GET /api/index/openapi.json` (3.0.x, info, the 7 documented paths incl. `/api/contracts/{id}/ai-auto` and `/api/orders/{id}/claim`) |
 | T75 | imports: CSV (incl. a quoted name with a comma), JSON, Shopify payload (`variants[].price`, `product_type`, `body_html`), WooCommerce payload (`categories[].name`); imported products appear in the merchant catalog **and** `/api/index`; upsert by `sku` updates price without duplicating; unknown adapter → 400; no-data import → 400 or a 200 that imports nothing; **reset wipes imported inventory** back to the 2+5 seed |
 | T76 | `/market.html` has the "For indexers" panel + manifest/feed references; `/merchant.html` has "Import catalog" + CSV/Shopify/Woo options; final reset restores 5 index items |
+
+## v6 coverage — DEPLOYABILITY-SPEC (MCP, A2A card, ranking, widget)
+
+| Test | Covers |
+|---|---|
+| T77 | **MCP stdio**: spawns `node mcp/server.js` with `SETTLED_BASE_URL` pointed at the test server; `initialize` → `protocolVersion 2024-11-05`, `capabilities.tools`, `serverInfo.name "settled"`; `notifications/initialized` gets no reply; `tools/list` → **7 tools** (`index_manifest`, `index_feed`, `index_search`, `negotiate_start`, `negotiate_auto`, `order_create`, `claim_open`) each with `inputSchema`; `tools/call index_manifest` → `content[0].text` parses to a `settled-index/1.0` manifest, `isError:false`; unknown tool → `isError:true`; MCP stdout contains JSON-RPC lines only; child killed in `finally` |
+| T78 | A2A-style card at **both** `/.well-known/agent-card.json` and `/api/a2a/agent-card`: `protocolVersion 0.2.0`, name `Settled`, description, capabilities, default input/output modes `application/json`, ≥3 skills (`negotiate`/`verify`/`claim`) with tags; both paths serve byte-identical JSON; no private ranges |
+| T79 | `/api/index?sort=trust\|price\|value`: `ranking{sort,basis}` metadata; trust ordering is exactly `m1,m1,m2,m2,m3` (merchant score desc, price tie-break); price ascending; value ordered by `(price − published_min)/price` desc using **published** values only; no private ranges in any sort response; `/api/index/feed` ordering unchanged across sort queries |
+| T80 | `/embed-demo.html` → 200 with the `settled-widget.js` install snippet, `data-merchant`/`data-product`, a PayPal surface and a "what (just) happened" explainer panel (the current copy reads *What just happened?*); `/settled-widget.js` → 200 JS that reads both data attributes, builds `/negotiate.html?merchant=…&product=…`, names no private-range keys and loads no external js/css |
 
 ## Reading a failure
 
@@ -190,5 +199,15 @@ Every failure prints the assertion that broke and either the exact response body
 - **OpenAPI path parameters** may be named anything (`{id}`, `{orderId}`); T74 matches the parameterised paths with a regex, not literal strings.
 - **`/.well-known/settled-agent.json`** is served outside `/api`, so it is checked for a JSON content type as well as shape.
 - **Reset must clear imported products**, not just orders/claims/contracts; T75/T76 assert the index returns to exactly 5 seed offers afterwards (this caught a real state-leak class of bug in mock testing).
+
+### v6 (DEPLOYABILITY-SPEC) ambiguities the suite resolves conservatively
+
+- **MCP is a child process, not HTTP.** T77 matches responses by JSON-RPC `id` (never by line order), tolerates notifications with no reply, caps each wait at 20 s, and kills the child in `finally` so a failure cannot leave a stray `node mcp/server.js`.
+- **MCP `SETTLED_BASE_URL`** is passed explicitly and pointed at the suite's own server (the spawned `PORT=4400` one, or `BASE_URL` when reusing) — not left to the 4173 default.
+- **Unknown MCP tool** must come back as `result.isError:true` per §1; a bare JSON-RPC error is reported as a mismatch rather than silently accepted.
+- **A2A card equality.** §2 documents one card for two paths; T78 requires the two responses to be identical, so a divergent copy of the card fails.
+- **`value` ranking** is asserted against the computed published discount (non-increasing), not a hardcoded item order, so tie ordering stays free. `trust` **is** pinned to the seed order because §3 fixes merchant-score desc + price.
+- **Feed stability** is asserted by comparing `offer_id` sequences before and after sort queries — ranking must never leak into feed pagination order.
+- **Widget asset purity** is asserted (`no external js/css loads`) and the widget source is scanned for private-range keys; the embed page must contain the install snippet, not just link to it.
 
 If the backend or spec changes, update the assertion and the corresponding row above; keep the `Tnn` ids stable so a failing demo check maps to a known behaviour.

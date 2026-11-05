@@ -18,6 +18,8 @@
 
 **Machine index for any personal AI.** The same offers are emitted at `/api/index/feed` (manifest → paginated feed → negotiate), with OpenAPI, an agent manifest and inventory adapters (CSV/JSON/Shopify/Woo/feed). A central indexer can crawl one feed; an agent needs no merchant URL.
 
+**Runtime adapters.** MCP server (7 tools), A2A-style agent card, OpenAPI, and a one-line storefront widget make it consumable by any personal-AI runtime and installable on any PayPal storefront. Index ranking uses only the published range.
+
 1. **Trust** — an HMAC/W3C signed **Merchant Trust Credential** built from settled payments, delivery and disputes. Portable to any store, PSP or agent; verified via `POST /api/trust/verify`.
 2. **Protection** — **risk-priced per order**: tier A 35 bps / B 90 / C 150 / decline; cap $5k/$2.5k/$1k; instant capture / capture+reserve / escrow. The merchant pays; the buyer pays $0.
 3. **Recourse + identity** — **Agent Passport** (operator KYB, signed mandate, spend limits, reputation) + **Agent Commerce Contract** + a **buyer/agent-initiated claim paid from the merchant reserve in ~1.2s** through the PayPal refund API.
@@ -49,7 +51,7 @@ Trust credential (m1: tier A, 91, 94% coverage, $5,000 cap, $12,500 reserve) →
 
 ## Evidence today / what is simulated
 
-- **Real:** risk engine, HMAC credential + hash chain, reserve accounting, claims, agent passport, contract signing, PayPal Orders adapter, **74/74 e2e tests**.
+- **Real:** risk engine, HMAC credential + hash chain, reserve accounting, claims, agent passport, contract signing, PayPal Orders adapter, **78/78 e2e tests**.
 - **Simulated:** payment ids and delivery in SIM mode; the $25k pool is a demo pool. **Production:** insurer/LC-backed reserve, carrier delivery evidence, counsel/insurance workstreams. Say this before a judge asks.
 - **Pre-revenue, pre-traction:** the next 30 days are pre-registered tests — 12 merchant interviews, 3/12 LOIs at ≥25 bps, a holdout conversion test (≥5% relative lift), a 20-claim concierge pilot, and one insurer term sheet.
 

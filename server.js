@@ -820,6 +820,7 @@ function handleIndex(req, res, query) {
     budget: query.get('budget'),
     merchant: query.get('merchant'),
     limit: query.get('limit'),
+    sort: query.get('sort'),
   }));
 }
 
@@ -893,6 +894,51 @@ function handleIndexOpenapi(req, res) {
     'Cache-Control': 'no-cache',
   });
   res.end(openapiCache);
+}
+
+/**
+ * A2A-style discovery card. Deliberately labelled as A2A *style* — this is a
+ * discovery document, not a claim of full A2A protocol support.
+ */
+function handleA2aAgentCard(req, res) {
+  sendJson(res, 200, {
+    protocolVersion: '0.2.0',
+    name: 'Settled',
+    description: 'PayPal merchant negotiation index and assurance layer',
+    url: '/',
+    version: '1.0.0',
+    capabilities: { streaming: false, pushNotifications: false },
+    defaultInputModes: ['application/json'],
+    defaultOutputModes: ['application/json'],
+    skills: [
+      {
+        id: 'negotiate',
+        name: 'Negotiate a purchase',
+        description: 'Find a merchant offer, negotiate within a mandate, sign a contract',
+        tags: ['commerce', 'negotiation'],
+        examples: ['Negotiate the Aurora One under $240'],
+      },
+      {
+        id: 'verify',
+        name: 'Verify merchant trust',
+        description: 'Check the signed merchant credential',
+        tags: ['trust'],
+      },
+      {
+        id: 'claim',
+        name: 'Open a claim',
+        description: 'File a buyer/agent claim and get a reserve refund',
+        tags: ['recourse'],
+      },
+    ],
+    // Pointers to the runtime adapters that actually ship.
+    endpoints: {
+      mcp: 'mcp/server.js (stdio JSON-RPC 2.0)',
+      agentManifest: '/api/agent-manifest',
+      indexManifest: '/api/index/manifest',
+      openapi: '/api/index/openapi.json',
+    },
+  });
 }
 
 /** Agent card for any personal AI (also served at /.well-known). */
@@ -1037,6 +1083,9 @@ const server = http.createServer(async (req, res) => {
   if ((method === 'GET' || method === 'HEAD') && pathname === '/.well-known/settled-agent.json') {
     return handleAgentManifest(req, res);
   }
+  if ((method === 'GET' || method === 'HEAD') && pathname === '/.well-known/agent-card.json') {
+    return handleA2aAgentCard(req, res);
+  }
 
   // Static.
   if (method !== 'GET' && method !== 'HEAD') {
@@ -1097,6 +1146,11 @@ async function routeApi(req, res, method, pathname, query) {
   // /api/adapters (inventory/agent/checkout registry)
   if (seg.length === 2 && seg[1] === 'adapters' && method === 'GET') {
     return handleAdapters(req, res);
+  }
+
+  // /api/a2a/agent-card (A2A-style discovery card)
+  if (seg.length === 3 && seg[1] === 'a2a' && seg[2] === 'agent-card' && method === 'GET') {
+    return handleA2aAgentCard(req, res);
   }
 
   // /api/agent-manifest (agent card)

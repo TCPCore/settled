@@ -1832,6 +1832,232 @@ async function main() {
     eq((idx.json.items || []).length, 5, 'final reset must restore 5 index items');
     return `market.html (${market.text.length}B) + merchant.html (${merchant.text.length}B) markers ok; seed restored`;
   });
+
+  // =========================================================================
+  // v6 — deployability: MCP stdio, A2A card, ranking, widget (DEPLOYABILITY-SPEC)
+  // =========================================================================
+  await reset();
+
+  async function mcpSession(baseUrl) {
+    const mcpPath = path.join(ROOT, 'mcp', 'server.js');
+    assert(fs.existsSync(mcpPath), `mcp/server.js not found at ${mcpPath}`, { looked_for: mcpPath });
+    const proc = spawn(process.execPath, ['mcp/server.js'], {
+      cwd: ROOT,
+      env: { ...process.env, SETTLED_BASE_URL: baseUrl, PORT: String(PORT) },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const lines = [];
+    const invalid = [];
+    let stderr = '';
+    let buf = '';
+    proc.stdout.on('data', (d) => {
+      buf += d.toString();
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (!line) continue;
+        try {
+          JSON.parse(line);
+          lines.push(line);
+        } catch {
+          invalid.push(line.slice(0, 200));
+        }
+      }
+    });
+    proc.stderr.on('data', (d) => (stderr += d.toString()));
+    const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function nextResponse(id, timeoutMs = 20000) {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const at = lines.findIndex((l) => {
+          try {
+            return JSON.parse(l).id === id;
+          } catch {
+            return false;
+          }
+        });
+        if (at >= 0) return JSON.parse(lines.splice(at, 1)[0]);
+        if (proc.exitCode !== null) fail(`MCP process exited (code ${proc.exitCode}) before response id=${id}`, { stderr: stderr.slice(-900), invalid_stdout: invalid });
+        await waitMs(25);
+      }
+      fail(`MCP timeout after ${timeoutMs}ms waiting for response id=${id}`, { stderr: stderr.slice(-900), recent_stdout: lines.slice(-4), invalid_stdout: invalid });
+    }
+    return {
+      proc,
+      invalid,
+      stderr: () => stderr,
+      send(obj) {
+        proc.stdin.write(`${JSON.stringify(obj)}\n`);
+      },
+      async request(obj) {
+        proc.stdin.write(`${JSON.stringify(obj)}\n`);
+        return nextResponse(obj.id);
+      },
+    };
+  }
+
+  await test('T77', 'v6 MCP stdio: initialize, tools/list (7), tools/call index_manifest, invalid tool', async () => {
+    const s = await mcpSession(BASE);
+    try {
+      const init = await s.request({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'settled-e2e', version: '1.0' } } });
+      eq(init.jsonrpc, '2.0', 'initialize jsonrpc');
+      eq(init.id, 1, 'initialize id');
+      hasKeys(init.result, ['protocolVersion', 'capabilities', 'serverInfo'], 'initialize result');
+      eq(init.result.protocolVersion, '2024-11-05', 'protocolVersion');
+      assert(isObj(init.result.capabilities) && isObj(init.result.capabilities.tools), 'initialize capabilities.tools must be an object');
+      eq(init.result.serverInfo.name, 'settled', 'serverInfo.name');
+      s.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+
+      const list = await s.request({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+      assert(Array.isArray(list.result && list.result.tools), 'tools/list must return result.tools[]');
+      const names = list.result.tools.map((t) => t.name);
+      eq(list.result.tools.length, 7, `tools/list count (got: ${names.join(', ')})`);
+      for (const n of ['index_manifest', 'index_feed', 'index_search', 'negotiate_start', 'negotiate_auto', 'order_create', 'claim_open']) {
+        assert(names.includes(n), `tools/list missing "${n}" (has: ${names.join(', ')})`);
+      }
+      for (const t of list.result.tools) hasKeys(t, ['name', 'description', 'inputSchema'], 'tool descriptor');
+
+      const call = await s.request({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'index_manifest', arguments: {} } });
+      const res = call.result;
+      assert(isObj(res), `tools/call index_manifest: missing result, got ${JSON.stringify(call).slice(0, 300)}`);
+      assert(Array.isArray(res.content) && res.content.length >= 1, 'tools/call result.content must be a non-empty array');
+      eq(res.content[0].type, 'text', 'content[0].type');
+      let manifest = null;
+      try {
+        manifest = JSON.parse(res.content[0].text);
+      } catch {
+        fail('tools/call index_manifest content is not JSON text', { text: String(res.content[0].text).slice(0, 400) });
+      }
+      eq(manifest.schema_version, 'settled-index/1.0', 'manifest.schema_version via MCP');
+      assert(isObj(manifest.totals), 'manifest.totals via MCP');
+      eq(res.isError, false, 'isError must be false on success');
+
+      const bad = await s.request({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'not_a_real_tool', arguments: {} } });
+      assert(isObj(bad.result) && bad.result.isError === true, `unknown tool must return result.isError:true, got ${JSON.stringify(bad).slice(0, 400)}`);
+
+      assert(s.invalid.length === 0, `MCP stdout must be JSON-RPC lines only; non-JSON line(s): ${JSON.stringify(s.invalid)}`);
+      return `initialize ok; 7 tools; index_manifest totals ${JSON.stringify(manifest.totals)}; invalid tool isError=true`;
+    } finally {
+      // Guarantee no stray stdio child: close stdin, SIGTERM, then SIGKILL if it lingers.
+      try {
+        s.proc.stdin.end();
+      } catch {}
+      try {
+        s.proc.kill('SIGTERM');
+      } catch {}
+      const killDeadline = Date.now() + 1500;
+      while (Date.now() < killDeadline && s.proc.exitCode === null && s.proc.signalCode === null) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      if (s.proc.exitCode === null && s.proc.signalCode === null) {
+        try {
+          s.proc.kill('SIGKILL');
+        } catch {}
+      }
+    }
+  });
+
+  await test('T78', 'v6 A2A card at /.well-known/agent-card.json and /api/a2a/agent-card', async () => {
+    const wk = await get('/.well-known/agent-card.json');
+    eq(wk.status, 200, '/.well-known/agent-card.json status');
+    assert(/json/i.test(wk.contentType), `well-known content-type: expected JSON, got ${wk.contentType}`);
+    hasKeys(wk.json, ['protocolVersion', 'name', 'description', 'url', 'version', 'capabilities', 'defaultInputModes', 'defaultOutputModes', 'skills'], 'agent card');
+    eq(wk.json.protocolVersion, '0.2.0', 'agent card protocolVersion');
+    eq(wk.json.name, 'Settled', 'agent card name');
+    assert(typeof wk.json.description === 'string' && wk.json.description.length > 0, 'agent card description');
+    assert(isObj(wk.json.capabilities), 'agent card capabilities');
+    assert(Array.isArray(wk.json.defaultInputModes) && wk.json.defaultInputModes.includes('application/json'), `defaultInputModes: ${JSON.stringify(wk.json.defaultInputModes)}`);
+    assert(Array.isArray(wk.json.defaultOutputModes) && wk.json.defaultOutputModes.includes('application/json'), `defaultOutputModes: ${JSON.stringify(wk.json.defaultOutputModes)}`);
+    assert(Array.isArray(wk.json.skills) && wk.json.skills.length >= 3, `skills: expected >=3, got ${JSON.stringify((wk.json.skills || []).map((x) => x.id))}`);
+    const skillIds = wk.json.skills.map((x) => x.id);
+    for (const id of ['negotiate', 'verify', 'claim']) assert(skillIds.includes(id), `agent card skill "${id}" missing (has: ${skillIds.join(', ')})`);
+    for (const sk of wk.json.skills) {
+      hasKeys(sk, ['id', 'name', 'description', 'tags'], 'skill');
+      assert(Array.isArray(sk.tags), `skill ${sk.id}.tags must be an array`);
+    }
+    assertNoPrivate(wk.json, '/.well-known/agent-card.json');
+
+    const api = await get('/api/a2a/agent-card');
+    eq(api.status, 200, '/api/a2a/agent-card status');
+    eq(JSON.stringify(api.json), JSON.stringify(wk.json), '/api/a2a/agent-card must serve the same card as /.well-known/agent-card.json');
+    return `protocolVersion ${wk.json.protocolVersion}, ${wk.json.skills.length} skills, both paths identical`;
+  });
+
+  await test('T79', 'v6 /api/index sort=trust|price|value: ranking metadata, ordering, no private range, feed stable', async () => {
+    const feedBefore = await get('/api/index/feed?limit=50');
+    eq(feedBefore.status, 200, 'feed status');
+    const feedIds = (feedBefore.json.items || []).map((i) => i.offer_id);
+
+    const trust = await get('/api/index?sort=trust');
+    eq(trust.status, 200, 'sort=trust status');
+    hasKeys(trust.json, ['items', 'ranking'], 'trust response');
+    hasKeys(trust.json.ranking, ['sort', 'basis'], 'ranking metadata');
+    eq(trust.json.ranking.sort, 'trust', 'ranking.sort');
+    assert(typeof trust.json.ranking.basis === 'string' && trust.json.ranking.basis.length > 0, `ranking.basis: ${JSON.stringify(trust.json.ranking.basis)}`);
+    const tItems = trust.json.items || [];
+    eq(tItems.length, 5, 'trust sort item count');
+    // controlled case: m1 (score 91) x2, m2 (76) x2, m3 (54) x1
+    eq(tItems.map((i) => i.merchant.id).join(','), 'm1,m1,m2,m2,m3', 'trust order = merchant score desc');
+    for (let i = 1; i < tItems.length; i++) {
+      const prev = tItems[i - 1], cur = tItems[i];
+      const ps = num(prev.merchant.score), cs = num(cur.merchant.score);
+      assert(ps >= cs, `trust order broken: ${prev.merchant.id}(${ps}) before ${cur.merchant.id}(${cs})`);
+      if (ps === cs) assert(num(prev.product.price) <= num(cur.product.price), `trust tie-break must be price asc at index ${i}`);
+    }
+    assertNoPrivate(trust.json, '/api/index?sort=trust');
+
+    const price = await get('/api/index?sort=price');
+    eq(price.status, 200, 'sort=price status');
+    eq(price.json.ranking && price.json.ranking.sort, 'price', 'price ranking.sort');
+    const pItems = price.json.items || [];
+    for (let i = 1; i < pItems.length; i++) {
+      assert(num(pItems[i - 1].product.price) <= num(pItems[i].product.price), `price order broken at index ${i}: ${pItems[i - 1].product.price} > ${pItems[i].product.price}`);
+    }
+    assertNoPrivate(price.json, '/api/index?sort=price');
+
+    const value = await get('/api/index?sort=value');
+    eq(value.status, 200, 'sort=value status');
+    eq(value.json.ranking && value.json.ranking.sort, 'value', 'value ranking.sort');
+    const vItems = value.json.items || [];
+    const discount = (it) => (num(it.product.price) - num(it.published_range.min)) / num(it.product.price);
+    for (let i = 0; i < vItems.length; i++) {
+      const it = vItems[i];
+      assert(num(it.published_range.min) <= num(it.product.price), `value sort item ${it.product.id}: published_min above price`);
+      if (i > 0) assert(discount(vItems[i - 1]) >= discount(it) - 1e-9, `value order broken at index ${i}: ${discount(vItems[i - 1]).toFixed(4)} < ${discount(it).toFixed(4)}`);
+    }
+    assertNoPrivate(value.json, '/api/index?sort=value');
+
+    const feedAfter = await get('/api/index/feed?limit=50');
+    const feedIdsAfter = (feedAfter.json.items || []).map((i) => i.offer_id);
+    eq(feedIdsAfter.join(','), feedIds.join(','), 'feed ordering must be unaffected by /api/index sort');
+    return `trust m1,m1,m2,m2,m3; price asc; value by published discount; feed stable (${feedIds.length} offers)`;
+  });
+
+  await test('T80', 'v6 /embed-demo.html + /settled-widget.js → 200, markers, merchant/product URL', async () => {
+    const embed = await get('/embed-demo.html');
+    eq(embed.status, 200, 'embed-demo.html status');
+    assert(/html/i.test(embed.contentType), `embed-demo content-type: ${embed.contentType}`);
+    assert(/settled-widget\.js/.test(embed.text), 'embed-demo.html must include the settled-widget.js install snippet');
+    assert(/data-merchant/.test(embed.text) && /data-product/.test(embed.text), 'embed-demo.html must pass data-merchant/data-product to the widget');
+    assert(/paypal/i.test(embed.text), 'embed-demo.html must show the PayPal button surface');
+    // The spec calls for a "what happened" explainer panel; the current copy reads "What just happened?".
+    assert(/what (just )?happened|what-happened/i.test(embed.text), `embed-demo.html must contain the "what (just) happened" explainer panel; got ${embed.text.length}B`);
+
+    const w = await get('/settled-widget.js');
+    eq(w.status, 200, 'settled-widget.js status');
+    assert(/javascript/i.test(w.contentType), `widget content-type: expected javascript, got ${w.contentType}`);
+    assert(w.text.length > 500, `settled-widget.js suspiciously short (${w.text.length} bytes)`);
+    assert(/data-merchant/.test(w.text), 'widget must read data-merchant');
+    assert(/data-product/.test(w.text), 'widget must read data-product');
+    assert(w.text.includes('/negotiate.html'), 'widget must link to /negotiate.html');
+    assert(/merchant=/.test(w.text) && /product=/.test(w.text), 'widget URL must include merchant and product query params');
+    assert(!/https?:\/\/[^"'\s]+\.(js|css)/i.test(w.text), 'widget must not load external js/css assets');
+    for (const f of PRIVATE_KEYS) {
+      assert(!new RegExp(`\\b${f}\\b`).test(w.text), `PRIVATE RANGE LEAK: "${f}" appears in /settled-widget.js`, { context: (w.text.match(new RegExp(`.{0,60}${f}.{0,60}`)) || [''])[0] });
+    }
+    return `embed-demo ${embed.text.length}B, widget ${w.text.length}B with merchant/product URL builder`;
+  });
 }
 
 // ---------------------------------------------------------------------------

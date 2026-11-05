@@ -60,6 +60,12 @@ Try the 5-step console at `/demo.html`. It runs end to end with one click and en
 - Inventory adapters: CSV, JSON, Shopify payload, WooCommerce payload, remote JSON feed; upsert by SKU; `GET /api/adapters` lists ready vs roadmap.
 - `market.html` is the human/board view of the same feed; `/merchant.html` is where the merchant configures it.
 
+**Agent-runtime + storefront adapters.**
+- MCP stdio server (`mcp/server.js`) with 7 tools: `index_manifest`, `index_feed`, `index_search`, `negotiate_start`, `negotiate_auto`, `order_create`, `claim_open`; config for Claude Desktop/Cursor in `mcp/README.md`.
+- A2A-style card at `/.well-known/agent-card.json` and `/api/a2a/agent-card`.
+- Drop-in widget (`/settled-widget.js`) + `/embed-demo.html`: one script tag adds “Negotiate with AI” to any storefront that already has PayPal.
+- Index ranking `?sort=price|trust|value` uses only the published range — no floor side-channel.
+
 **Trust and settlement engine.**
 - HMAC-SHA256 merchant credential + SHA-256 hash-chained event log (tamper-evident, verifiable from the dashboard and the agent API).
 - Risk engine derives score → tier → fee bps → cap → payment mode from outcome metrics, not hardcoded values.
@@ -93,7 +99,7 @@ We would rather say this first.
 - AI negotiation that is genuinely constrained: same accepted price on the deterministic path, model-generated transcript when a key is present, no scenario where the model can exceed the mandate.
 - Real PayPal sandbox money path in the same app as the SIM fallback, with clean failures.
 - A working refund in ~1.2s that updates reserve, score and tier in the same screen — the moment the pitch turns on.
-- The full e2e suite passing locally with zero external dependencies: **74/74 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
+- The full e2e suite passing locally with zero external dependencies: **78/78 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
 
 ## What we learned
 
