@@ -75,7 +75,7 @@ Optional: `data-position="bottom-right|bottom-left"`, `data-theme="dark|light"`,
 3. Step 4: SIM payment id (public demo); step 5: instant refund + AI claim review.
 4. Read `/` dashboard, `/agent.html`, and [LIVE-TEST.md](LIVE-TEST.md) for the live sandbox IDs in the recorded video.
 5. Open **`/embed-demo.html`** and click the negotiation widget — a storefront adds Settled with one script tag.
-6. Run `npm test` (78/78) from the repo.
+6. Run `npm test` (82/82) from the repo.
 
 ## Safety
 

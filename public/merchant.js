@@ -11,6 +11,9 @@
   var catalogPath = '/merchants/' + encodeURIComponent(merchantId) + '/catalog';
   var agentPath = '/merchants/' + encodeURIComponent(merchantId) + '/agent';
   var importPath = '/merchants/' + encodeURIComponent(merchantId) + '/catalog/import';
+  var connectorPath = '/merchants/' + encodeURIComponent(merchantId) + '/connector';
+  var syncPath = '/merchants/' + encodeURIComponent(merchantId) + '/catalog/sync';
+  var rulesPath = '/merchants/' + encodeURIComponent(merchantId) + '/rules';
   var AGENT_TONES = ['consultative', 'concise', 'warm', 'formal'];
   var ADAPTER_INFO = {
     csv: { label: 'CSV upload', kind: 'csv', hint: 'Paste CSV text or choose a .csv file. Headers: sku/name/price/category/description.', placeholder: 'sku,name,price,category,description\nAURORA-ONE,Aurora One headphones,249,Audio,Reference-grade headphones.' },
@@ -35,7 +38,23 @@
     loading: false,
     agent: null,
     agentChanged: false,
-    adapters: null
+    adapters: null,
+    connector: null,
+    connectorDue: null,
+    connectorLoaded: false,
+    connectorError: null,
+    rules: null,
+    rulesLoaded: false,
+    rulesError: null
+  };
+
+  var RULE_DEFAULTS = {
+    negotiable: true,
+    sell_min_pct: 0.82,
+    auto_accept_pct: 0.95,
+    publish_min_pct: 0.86,
+    max_discount_pct: 18,
+    window: { from: null, to: null }
   };
 
   var el = {
@@ -100,7 +119,35 @@
     addCategory: document.getElementById('addCategory'),
     addDescription: document.getElementById('addDescription'),
     addSubmit: document.getElementById('addSubmit'),
-    addError: document.getElementById('addError')
+    addError: document.getElementById('addError'),
+    connectorForm: document.getElementById('connectorForm'),
+    connectorBadge: document.getElementById('connectorBadge'),
+    connectorAdapter: document.getElementById('connectorAdapter'),
+    connectorUrl: document.getElementById('connectorUrl'),
+    connectorUrlHint: document.getElementById('connectorUrlHint'),
+    connectorInterval: document.getElementById('connectorInterval'),
+    connectorEnabled: document.getElementById('connectorEnabled'),
+    connectorDataField: document.getElementById('connectorDataField'),
+    connectorData: document.getElementById('connectorData'),
+    connectorDataHint: document.getElementById('connectorDataHint'),
+    connectorSaveBtn: document.getElementById('connectorSaveBtn'),
+    connectorSyncBtn: document.getElementById('connectorSyncBtn'),
+    connectorError: document.getElementById('connectorError'),
+    connectorLastSync: document.getElementById('connectorLastSync'),
+    connectorLastStatus: document.getElementById('connectorLastStatus'),
+    connectorCounts: document.getElementById('connectorCounts'),
+    connectorDue: document.getElementById('connectorDue'),
+    connectorLastError: document.getElementById('connectorLastError'),
+    connectorFoot: document.getElementById('connectorFoot'),
+    connectorMerchantId: document.getElementById('connectorMerchantId'),
+    rulesPanel: document.getElementById('rulesPanel'),
+    rulesBadge: document.getElementById('rulesBadge'),
+    rulesBody: document.getElementById('rulesBody'),
+    rulesError: document.getElementById('rulesError'),
+    rulesRefreshBtn: document.getElementById('rulesRefreshBtn'),
+    rulesApplyBtn: document.getElementById('rulesApplyBtn'),
+    rulesFoot: document.getElementById('rulesFoot'),
+    rulesMerchantId: document.getElementById('rulesMerchantId')
   };
 
   S.mountNav('merchant');
@@ -153,6 +200,7 @@
       publish_max: n.publish_max !== undefined ? (n.publish_max === null ? null : Number(n.publish_max)) : round(price),
       auto_accept: auto,
       max_discount_pct: n.max_discount_pct !== undefined && n.max_discount_pct !== null ? Number(n.max_discount_pct) : 18,
+      window: n.window && typeof n.window === 'object' ? { from: n.window.from || null, to: n.window.to || null } : { from: null, to: null },
       terms: n.terms || { delivery_days: 3, returns_days: 30, warranty_months: 12 }
     };
   }
@@ -166,12 +214,16 @@
       var results = await Promise.all([
         S.api(catalogPath).catch(function (err) { return { __error: err }; }),
         S.api('/health').catch(function () { return null; }),
-        S.api('/adapters').catch(function () { return null; })
+        S.api('/adapters').catch(function () { return null; }),
+        S.api(connectorPath).catch(function (err) { return { __error: err }; }),
+        S.api(rulesPath).catch(function (err) { return { __error: err }; })
       ]);
       state.health = results[1] || null;
       state.adapters = results[2] || null;
       if (state.health) S.setEnv(state.health.mode);
       renderAdapterList();
+      applyConnectorResult(results[3] && results[3].__error ? null : results[3], results[3] && results[3].__error ? results[3].__error : null);
+      applyRulesResult(results[4] && results[4].__error ? null : results[4], results[4] && results[4].__error ? results[4].__error : null);
       if (results[0] && results[0].__error) throw results[0].__error;
       var catalog = results[0] && (results[0].catalog || results[0]);
       applyCatalog(catalog, null, false);
@@ -647,6 +699,14 @@
             field('max_discount_pct', 'max_discount_pct', n.max_discount_pct, 'Max discount %') +
           '</div>' +
         '</div>' +
+        '<div class="pr-group window">' +
+          '<div class="pr-group-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg>Negotiation window (blank = inherit category)</div>' +
+          '<div class="pr-inputs">' +
+            windowInputField('window_from', 'Open from', n.window && n.window.from, 'Blank = inherit the category window') +
+            windowInputField('window_to', 'Closes', n.window && n.window.to, 'Blank = inherit the category window') +
+          '</div>' +
+          '<div class="pr-window-note" data-window-note></div>' +
+        '</div>' +
       '</div>' +
       '<div class="pr-foot">' +
         '<div class="pr-preview" data-preview></div>' +
@@ -680,7 +740,9 @@
       publish_min: num(input('publish_min').value),
       publish_max: publishMax === '' ? null : num(publishMax),
       auto_accept: num(input('auto_accept').value),
-      max_discount_pct: num(input('max_discount_pct').value)
+      max_discount_pct: num(input('max_discount_pct').value),
+      window_from: input('window_from') ? input('window_from').value : '',
+      window_to: input('window_to') ? input('window_to').value : ''
     };
   }
 
@@ -703,6 +765,7 @@
       if (fields.sell_max !== null && fields.auto_accept > fields.sell_max) errors.push('auto_accept must be ≤ sell_max');
     }
     if (fields.max_discount_pct === null || fields.max_discount_pct < 0 || fields.max_discount_pct > 50) errors.push('max_discount_pct must be 0–50');
+    if (fields.window_from && fields.window_to && new Date(fields.window_from) > new Date(fields.window_to)) errors.push('Window from must be before to');
     return errors;
   }
 
@@ -742,6 +805,20 @@
     }
     if (!fields.listed) parts.push('<span class="off">hidden from index</span>');
     preview.innerHTML = parts.join(' · ');
+
+    var fromIso = localInputToIso(fields.window_from);
+    var toIso = localInputToIso(fields.window_to);
+    var catRule = ruleForCategory(product.category);
+    var note = row.querySelector('[data-window-note]');
+    if (note) {
+      if (fromIso || toIso) {
+        note.innerHTML = 'Override · ' + S.esc(windowText(fromIso, toIso));
+      } else if (catRule && (catRule.window.from || catRule.window.to)) {
+        note.innerHTML = 'Inherits <b>' + S.esc(product.category) + '</b> · ' + S.esc(windowText(catRule.window.from, catRule.window.to));
+      } else {
+        note.innerHTML = 'Inherits the category rule — no window (negotiation always open).';
+      }
+    }
   }
 
   async function saveRow(row) {
@@ -793,7 +870,11 @@
         publish_min: fields.publish_min,
         publish_max: fields.publish_max,
         auto_accept: fields.auto_accept,
-        max_discount_pct: fields.max_discount_pct
+        max_discount_pct: fields.max_discount_pct,
+        // null clears the item override so the product inherits the category window.
+        window: (fields.window_from || fields.window_to)
+          ? { from: localInputToIso(fields.window_from), to: localInputToIso(fields.window_to) }
+          : null
       }
     };
   }
@@ -861,6 +942,516 @@
     }
   }
 
+  /* --------------------------------------------------- window helpers -- */
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function isoToLocalInput(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+  function localInputToIso(value) {
+    if (!value) return null;
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+  function windowInputField(name, label, iso, hint) {
+    return '<label class="pr-field" title="' + S.esc(hint) + '"><span class="pf-label">' + S.esc(label) + '</span>' +
+      '<input class="m-input" type="datetime-local" data-field="' + S.esc(name) + '" value="' + S.esc(isoToLocalInput(iso)) + '" aria-label="' + S.esc(label) + '"></label>';
+  }
+  function ruleForCategory(category) {
+    var map = state.rules && state.rules.rules;
+    return map && category && map[category] ? map[category] : null;
+  }
+  function windowText(fromIso, toIso) {
+    var from = fromIso ? S.dateFmt(fromIso) : 'always';
+    var to = toIso ? S.dateFmt(toIso) : 'no close';
+    return from + ' → ' + to;
+  }
+
+  /* --------------------------------------------- inventory source -- */
+  var CONNECTOR_MANUAL = { json: true, csv: true };
+
+  function connectorOf(res) {
+    if (!res || typeof res !== 'object') return null;
+    if (res.connector && typeof res.connector === 'object') return res.connector;
+    if (res.adapter !== undefined || res.last_status !== undefined || res.last_sync_at !== undefined) return res;
+    return null;
+  }
+
+  function applyConnectorResult(res, err) {
+    if (err) {
+      state.connectorLoaded = false;
+      state.connectorError = err;
+      renderConnectorUnavailable(err);
+      return;
+    }
+    var c = connectorOf(res);
+    if (c) {
+      state.connector = c;
+      state.connectorLoaded = true;
+      state.connectorError = null;
+      if (res && res.due_at !== undefined) state.connectorDue = res.due_at;
+    } else {
+      state.connectorLoaded = false;
+    }
+    renderConnector();
+  }
+
+  function connectorCountsText(counts) {
+    if (!counts || typeof counts !== 'object') return '—';
+    var bits = [];
+    if (counts.imported !== undefined && counts.imported !== null) bits.push(counts.imported + ' in');
+    if (counts.updated !== undefined && counts.updated !== null) bits.push(counts.updated + ' upd');
+    if (counts.skipped !== undefined && counts.skipped !== null) bits.push(counts.skipped + ' skip');
+    return bits.length ? bits.join(' · ') : '—';
+  }
+
+  function renderConnector() {
+    var c = state.connector;
+    if (!c) return renderConnectorUnavailable(state.connectorError);
+    var known = ['feed', 'json', 'csv'];
+    var adapter = known.indexOf(c.adapter) >= 0 ? c.adapter : 'feed';
+    el.connectorAdapter.value = adapter;
+    el.connectorUrl.value = c.url || '';
+    el.connectorInterval.value = c.interval_seconds !== undefined && c.interval_seconds !== null ? c.interval_seconds : 300;
+    el.connectorEnabled.checked = c.enabled !== false;
+    el.connectorBadge.textContent = adapter;
+    el.connectorBadge.className = 'badge ' + (c.enabled === false ? 'gold' : 'emerald');
+    el.connectorLastSync.textContent = c.last_sync_at ? S.dateFmt(c.last_sync_at) : 'never';
+    var status = String(c.last_status || 'never');
+    el.connectorLastStatus.textContent = status;
+    el.connectorLastStatus.className = status === 'ok' ? 'is-ok' : (status === 'error' ? 'is-err' : 'is-muted');
+    el.connectorCounts.textContent = connectorCountsText(c.last_counts);
+    el.connectorDue.textContent = state.connectorDue ? S.dateFmt(state.connectorDue) : (c.enabled === false ? 'paused' : '—');
+    if (c.last_error) {
+      el.connectorLastError.hidden = false;
+      el.connectorLastError.innerHTML = '<b>Last error</b> · ' + S.esc(c.last_error);
+    } else {
+      el.connectorLastError.hidden = true;
+      el.connectorLastError.innerHTML = '';
+    }
+    var manual = !!CONNECTOR_MANUAL[adapter];
+    el.connectorFoot.textContent = c.enabled === false
+      ? 'Scheduler paused — Pull now still works. ' + (manual ? 'JSON/CSV sources sync a manual payload; use Import catalog for large pushes.' : 'The feed is pulled with a 5s server timeout.')
+      : 'Scheduler pulls every ' + (c.interval_seconds || 300) + 's · ' + (manual ? 'manual payload sync only' : '5s fetch timeout · failures recorded, never fatal') + '.';
+    el.connectorMerchantId.textContent = merchantId;
+    updateConnectorMode(false);
+  }
+
+  function renderConnectorUnavailable(err) {
+    if (!el.connectorBadge) return;
+    el.connectorBadge.textContent = 'offline';
+    el.connectorBadge.className = 'badge gold';
+    el.connectorLastSync.textContent = '—';
+    el.connectorLastStatus.textContent = 'unavailable';
+    el.connectorLastStatus.className = 'is-err';
+    el.connectorCounts.textContent = '—';
+    el.connectorDue.textContent = '—';
+    el.connectorLastError.hidden = false;
+    el.connectorLastError.innerHTML = '<b>Connector API unavailable</b> · ' + S.esc((err && err.message) || 'GET /connector did not respond.');
+    el.connectorFoot.textContent = 'GET/PUT ' + connectorPath + ' is not deployed yet — retry after the backend lands.';
+    el.connectorMerchantId.textContent = merchantId;
+  }
+
+  function updateConnectorMode(clearData) {
+    if (!el.connectorAdapter) return;
+    var adapter = el.connectorAdapter.value || 'feed';
+    var manual = !!CONNECTOR_MANUAL[adapter];
+    el.connectorDataField.hidden = !manual;
+    el.connectorUrlHint.textContent = manual ? 'optional for json/csv' : 'feed pulls this URL';
+    el.connectorDataHint.textContent = 'only used by Pull now · ' + adapter;
+    if (clearData) el.connectorData.value = '';
+    el.connectorError.textContent = '';
+  }
+
+  function readConnectorForm() {
+    return {
+      adapter: el.connectorAdapter.value || 'feed',
+      url: (el.connectorUrl.value || '').trim(),
+      interval_seconds: num(el.connectorInterval.value),
+      enabled: !!el.connectorEnabled.checked
+    };
+  }
+
+  function validateConnector(form) {
+    var errors = [];
+    if (['feed', 'json', 'csv'].indexOf(form.adapter) < 0) {
+      errors.push('Shopify and WooCommerce OAuth connectors are roadmap — use the payload import below.');
+    }
+    if (form.interval_seconds === null || form.interval_seconds < 60 || form.interval_seconds > 86400) {
+      errors.push('Interval must be 60–86400 seconds.');
+    }
+    if (form.adapter === 'feed' && !form.url) {
+      errors.push('A feed URL is required for the feed adapter.');
+    }
+    if (form.url) {
+      var okUrl = false;
+      try {
+        var parsed = new URL(form.url);
+        okUrl = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch (e) { okUrl = false; }
+      if (!okUrl) errors.push('Source URL must be a valid http(s) URL.');
+    }
+    return errors;
+  }
+
+  async function saveConnector(event) {
+    if (event) event.preventDefault();
+    if (el.connectorSaveBtn.disabled) return;
+    var form = readConnectorForm();
+    var errors = validateConnector(form);
+    if (errors.length) {
+      el.connectorError.textContent = errors[0];
+      S.toast(errors[0], 'err');
+      return;
+    }
+    el.connectorError.textContent = '';
+    el.connectorSaveBtn.disabled = true;
+    try {
+      var res = await S.api(connectorPath, { method: 'PUT', body: form });
+      applyConnectorResult(res);
+      await loadConnector();
+      S.toast('Inventory source saved.', 'ok');
+    } catch (err) {
+      el.connectorError.textContent = (err && err.message) || 'Could not save the inventory source.';
+      S.toast((err && err.message) || 'Could not save the inventory source.', 'err');
+    } finally {
+      el.connectorSaveBtn.disabled = false;
+    }
+  }
+
+  async function loadConnector() {
+    try {
+      var res = await S.api(connectorPath);
+      applyConnectorResult(res);
+    } catch (err) {
+      applyConnectorResult(null, err);
+    }
+  }
+
+  async function syncConnector() {
+    if (el.connectorSyncBtn.disabled) return;
+    var form = readConnectorForm();
+    var formErrors = validateConnector(form);
+    if (formErrors.length) {
+      el.connectorError.textContent = formErrors[0];
+      S.toast(formErrors[0], 'err');
+      return;
+    }
+    var adapter = form.adapter;
+    var data;
+    if (CONNECTOR_MANUAL[adapter]) {
+      var raw = (el.connectorData.value || '').trim();
+      if (!raw) {
+        el.connectorError.textContent = 'Paste a ' + (adapter === 'csv' ? 'CSV' : 'JSON') + ' payload below, or use the Import catalog panel.';
+        S.toast('JSON/CSV sources need a manual payload to sync.', 'err');
+        return;
+      }
+      if (adapter === 'json') {
+        try {
+          data = JSON.parse(raw);
+        } catch (e) {
+          el.connectorError.textContent = 'Manual payload is not valid JSON: ' + e.message;
+          S.toast('Manual payload is not valid JSON.', 'err');
+          return;
+        }
+      } else {
+        data = raw;
+      }
+    }
+    el.connectorError.textContent = '';
+    setBusy(el.connectorSyncBtn, true, 'Pulling…');
+    try {
+      // Pull now runs against the form as shown: save the source config first,
+      // then sync (empty body for feed; {data} for manual json/csv payloads).
+      var putRes = await S.api(connectorPath, { method: 'PUT', body: form });
+      applyConnectorResult(putRes);
+      var body = CONNECTOR_MANUAL[adapter] ? { data: data } : {};
+      var res = await S.api(syncPath, { method: 'POST', body: body });
+      var connector = connectorOf(res);
+      if (connector) state.connector = connector;
+      var sync = res && res.sync ? res.sync : (res || {});
+      var errors = Array.isArray(sync.errors) ? sync.errors : [];
+      if (errors.length) {
+        el.connectorError.textContent = 'Warnings: ' + errors.slice(0, 3).map(importErrorText).join('; ');
+      }
+      var counts = (connector && connector.last_counts) || {
+        imported: sync.imported,
+        updated: sync.updated,
+        skipped: sync.skipped
+      };
+      var countsTxt = connectorCountsText(counts);
+      S.toast('Pull complete' + (countsTxt !== '—' ? ' · ' + countsTxt : '') + '.', errors.length ? 'warn' : 'ok');
+      await loadConnector();
+      await refreshCatalog();
+      // A sync can introduce new categories; refresh the rule rows (and their inherit notes).
+      if (state.rulesLoaded) await loadRules();
+    } catch (err) {
+      el.connectorError.textContent = (err && err.message) || 'Pull failed.';
+      S.toast((err && err.message) || 'Pull failed.', 'err');
+      await loadConnector();
+    } finally {
+      setBusy(el.connectorSyncBtn, false);
+    }
+  }
+
+  /* ---------------------------------------------- category rules -- */
+  function ruleFraction(value, fallback) {
+    var n = Number(value);
+    if (!isFinite(n) || n < 0) return fallback;
+    return n > 1 ? n / 100 : n;
+  }
+  function rulePercent(value, fallback) {
+    var n = Number(value);
+    if (!isFinite(n)) return fallback;
+    return n > 0 && n < 1 ? n * 100 : n;
+  }
+  function normalizeRule(raw) {
+    var r = raw && typeof raw === 'object' ? raw : {};
+    var w = r.window && typeof r.window === 'object' ? r.window : {};
+    return {
+      negotiable: r.negotiable !== false,
+      sell_min_pct: ruleFraction(r.sell_min_pct, RULE_DEFAULTS.sell_min_pct),
+      auto_accept_pct: ruleFraction(r.auto_accept_pct, RULE_DEFAULTS.auto_accept_pct),
+      publish_min_pct: ruleFraction(r.publish_min_pct, RULE_DEFAULTS.publish_min_pct),
+      max_discount_pct: rulePercent(r.max_discount_pct, RULE_DEFAULTS.max_discount_pct),
+      window: { from: w.from || null, to: w.to || null }
+    };
+  }
+  function normalizeRuleCategories(categories, rules) {
+    var out = [];
+    var seen = {};
+    function add(name) {
+      name = String(name === null || name === undefined ? '' : name).trim();
+      if (!name || seen[name]) return;
+      seen[name] = true;
+      out.push(name);
+    }
+    if (Array.isArray(categories)) {
+      categories.forEach(function (c) {
+        if (c && typeof c === 'object') add(c.name || c.category || c.id);
+        else add(c);
+      });
+    }
+    Object.keys(rules || {}).forEach(add);
+    out.sort(function (a, b) { return a.localeCompare(b); });
+    return out;
+  }
+
+  function applyRulesResult(res, err) {
+    if (err) {
+      state.rulesLoaded = false;
+      state.rulesError = err;
+      renderRulesUnavailable(err);
+      return;
+    }
+    var data = res && typeof res === 'object' ? res : {};
+    if (data.rules && typeof data.rules === 'object') {
+      var map = {};
+      Object.keys(data.rules).forEach(function (key) { map[key] = normalizeRule(data.rules[key]); });
+      state.rules = { rules: map, categories: normalizeRuleCategories(data.categories, map) };
+      state.rulesLoaded = true;
+      state.rulesError = null;
+    } else {
+      state.rulesLoaded = false;
+      state.rulesError = null;
+    }
+    renderRules();
+  }
+
+  function renderRulesUnavailable(err) {
+    if (!el.rulesBody) return;
+    el.rulesBadge.textContent = 'offline';
+    el.rulesBadge.className = 'badge gold';
+    el.rulesBody.innerHTML = '<tr><td colspan="8" class="rules-empty"><strong>Category rules API unavailable</strong>' +
+      S.esc((err && err.message) || 'GET /rules did not respond yet — retry after the backend deploys.') + '</td></tr>';
+    el.rulesError.textContent = '';
+    el.rulesFoot.textContent = 'GET/PUT ' + rulesPath + ' is not deployed yet.';
+    el.rulesMerchantId.textContent = merchantId;
+  }
+
+  function percentCell(field, value, min, max) {
+    return '<input class="m-input rules-pct" type="number" data-rule="' + S.esc(field) + '" min="' + min + '" max="' + max + '" step="1" value="' + S.esc(Math.round(Number(value) || 0)) + '">';
+  }
+  function ruleWindowCell(field, iso) {
+    return '<input class="m-input rules-window" type="datetime-local" data-rule="' + S.esc(field) + '" value="' + S.esc(isoToLocalInput(iso)) + '">';
+  }
+  function ruleRow(category) {
+    var r = (state.rules && state.rules.rules && state.rules.rules[category]) || normalizeRule(null);
+    return '<tr data-category="' + S.esc(category) + '">' +
+      '<td><div class="rules-cat" title="' + S.esc(category) + '">' + S.esc(category) + '</div></td>' +
+      '<td><label class="switch" title="Negotiable in this category"><input type="checkbox" data-rule="negotiable"' + (r.negotiable ? ' checked' : '') + '><span class="switch-track"></span></label></td>' +
+      '<td>' + percentCell('sell_min_pct', r.sell_min_pct * 100, 50, 99) + '</td>' +
+      '<td>' + percentCell('auto_accept_pct', r.auto_accept_pct * 100, 51, 100) + '</td>' +
+      '<td>' + percentCell('max_discount_pct', r.max_discount_pct, 0, 50) + '</td>' +
+      '<td>' + ruleWindowCell('window_from', r.window.from) + '</td>' +
+      '<td>' + ruleWindowCell('window_to', r.window.to) + '</td>' +
+      '<td class="rules-cell-status"><button class="rules-save" type="button" data-rule-save>Save</button><span class="rules-row-status" data-rule-status>Saved</span></td>' +
+    '</tr>';
+  }
+
+  function renderRules() {
+    if (!state.rulesLoaded) { renderRulesUnavailable(state.rulesError); return; }
+    var cats = (state.rules && state.rules.categories) || [];
+    el.rulesBadge.textContent = String(cats.length);
+    el.rulesBadge.className = 'badge ' + (cats.length ? 'blue' : 'gold');
+    el.rulesMerchantId.textContent = merchantId;
+    if (!cats.length) {
+      el.rulesBody.innerHTML = '<tr><td colspan="8" class="rules-empty"><strong>No categories yet</strong>Add a product or save a category rule to see it here.</td></tr>';
+      el.rulesFoot.textContent = 'No category rules returned. Add products first, then set a policy per category.';
+      updateAllPreviews();
+      return;
+    }
+    el.rulesBody.innerHTML = cats.map(ruleRow).join('');
+    el.rulesFoot.textContent = 'Percentages are off list price. Saves apply to new and imported items; use Apply to re-derive existing items.';
+    updateAllPreviews();
+  }
+
+  function ruleInput(tr, field) {
+    return tr.querySelector('[data-rule="' + field + '"]');
+  }
+  function readRuleRow(tr) {
+    var category = tr.getAttribute('data-category');
+    var base = (state.rules && state.rules.rules && state.rules.rules[category]) || normalizeRule(null);
+    function valueOf(field) {
+      var input = ruleInput(tr, field);
+      return input ? String(input.value) : '';
+    }
+    function numberOr(field, fallback) {
+      var n = num(valueOf(field));
+      return n === null ? fallback : n;
+    }
+    var sellMin = numberOr('sell_min_pct', base.sell_min_pct * 100) / 100;
+    var auto = numberOr('auto_accept_pct', base.auto_accept_pct * 100) / 100;
+    var maxDiscount = numberOr('max_discount_pct', base.max_discount_pct);
+    var negotiable = ruleInput(tr, 'negotiable');
+    return {
+      negotiable: !negotiable || !!negotiable.checked,
+      sell_min_pct: sellMin,
+      auto_accept_pct: auto,
+      publish_min_pct: Math.min(Math.max(base.publish_min_pct, sellMin), auto),
+      max_discount_pct: maxDiscount,
+      window: { from: localInputToIso(valueOf('window_from')), to: localInputToIso(valueOf('window_to')) }
+    };
+  }
+
+  function validateRule(rule) {
+    var errors = [];
+    if (!(rule.sell_min_pct >= 0.5 && rule.sell_min_pct < rule.auto_accept_pct && rule.auto_accept_pct <= 1)) {
+      errors.push('Sell min must be 50–99% and below auto-accept (max 100%).');
+    }
+    if (rule.publish_min_pct < rule.sell_min_pct) errors.push('Publish min must be ≥ sell min.');
+    if (!(rule.max_discount_pct >= 0 && rule.max_discount_pct <= 50)) errors.push('Max discount must be 0–50%.');
+    if (rule.window.from && rule.window.to && new Date(rule.window.from) > new Date(rule.window.to)) {
+      errors.push('Window “from” must be before “to”.');
+    }
+    return errors;
+  }
+
+  function setRuleStatus(tr, text, cls) {
+    var status = tr.querySelector('[data-rule-status]');
+    if (!status) return;
+    status.textContent = text;
+    status.className = 'rules-row-status' + (cls ? ' ' + cls : '');
+  }
+
+  function markRuleDirty(tr) {
+    el.rulesError.textContent = '';
+    setRuleStatus(tr, 'Unsaved changes', 'dirty');
+  }
+
+  async function saveRule(tr) {
+    var category = tr.getAttribute('data-category');
+    if (!category) return;
+    var btn = tr.querySelector('[data-rule-save]');
+    if (btn && btn.disabled) return;
+    var rule = readRuleRow(tr);
+    var errors = validateRule(rule);
+    if (errors.length) {
+      setRuleStatus(tr, errors[0], 'err');
+      S.toast(errors[0], 'err');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    setRuleStatus(tr, 'Saving…', '');
+    try {
+      var res = await S.api(rulesPath + '/' + encodeURIComponent(category), { method: 'PUT', body: rule });
+      var map = {};
+      if (res && res.rules && typeof res.rules === 'object') {
+        Object.keys(res.rules).forEach(function (key) { map[key] = normalizeRule(res.rules[key]); });
+      } else {
+        map = Object.assign({}, state.rules.rules);
+      }
+      map[category] = normalizeRule((res && res.rule) || rule);
+      state.rules.rules = map;
+      if (state.rules.categories.indexOf(category) < 0) {
+        state.rules.categories.push(category);
+        state.rules.categories.sort(function (a, b) { return a.localeCompare(b); });
+      }
+      renderRules();
+      S.toast('Category rule saved · ' + category, 'ok');
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      setRuleStatus(tr, (err && err.message) || 'Save failed', 'err');
+      S.toast((err && err.message) || 'Could not save the category rule.', 'err');
+    }
+  }
+
+  async function loadRules() {
+    setBusy(el.rulesRefreshBtn, true, 'Loading…');
+    try {
+      var res = await S.api(rulesPath);
+      applyRulesResult(res);
+    } catch (err) {
+      applyRulesResult(null, err);
+      S.toast((err && err.message) || 'Could not load category rules.', 'err');
+    } finally {
+      setBusy(el.rulesRefreshBtn, false);
+    }
+  }
+
+  async function applyRules() {
+    if (el.rulesApplyBtn.disabled) return;
+    if (!state.rulesLoaded) {
+      S.toast('Category rules API unavailable.', 'err');
+      return;
+    }
+    el.rulesError.textContent = '';
+    setBusy(el.rulesApplyBtn, true, 'Applying…');
+    try {
+      var res = await S.api(rulesPath + '/apply', { method: 'POST', body: {} });
+      var updated = null;
+      if (res && res.updated !== undefined) updated = res.updated;
+      else if (res && res.applied !== undefined) updated = res.applied;
+      else if (res && Array.isArray(res.products)) updated = res.products.length;
+      var msg = 'Applied category rules to existing items' + (updated !== null ? ' · ' + updated + ' updated' : '') + '.';
+      if (res && res.rules && typeof res.rules === 'object') {
+        var map = {};
+        Object.keys(res.rules).forEach(function (key) { map[key] = normalizeRule(res.rules[key]); });
+        state.rules.rules = map;
+        state.rules.categories = normalizeRuleCategories(res.categories, map);
+        renderRules();
+      }
+      el.rulesFoot.textContent = msg;
+      S.toast(msg, 'ok');
+      await refreshCatalog();
+    } catch (err) {
+      el.rulesError.textContent = (err && err.message) || 'Could not apply category rules.';
+      S.toast((err && err.message) || 'Could not apply category rules.', 'err');
+    } finally {
+      setBusy(el.rulesApplyBtn, false);
+    }
+  }
+
+  function updateAllPreviews() {
+    if (!el.catalogList) return;
+    Array.prototype.forEach.call(el.catalogList.querySelectorAll('.product-row'), function (row) {
+      updatePreview(row);
+    });
+  }
+
   /* --------------------------------------------------------- events -- */
   function wire() {
     el.refresh.addEventListener('click', function () { refreshCatalog(null); });
@@ -904,15 +1495,45 @@
       var row = save.closest('.product-row');
       if (row) saveRow(row);
     });
+
+    if (el.connectorForm) el.connectorForm.addEventListener('submit', saveConnector);
+    if (el.connectorSyncBtn) el.connectorSyncBtn.addEventListener('click', syncConnector);
+    if (el.connectorAdapter) {
+      el.connectorAdapter.addEventListener('change', function () {
+        updateConnectorMode(true);
+        el.connectorLastError.hidden = true;
+      });
+    }
+
+    if (el.rulesRefreshBtn) el.rulesRefreshBtn.addEventListener('click', loadRules);
+    if (el.rulesApplyBtn) el.rulesApplyBtn.addEventListener('click', applyRules);
+    if (el.rulesBody) {
+      el.rulesBody.addEventListener('input', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('tr[data-category]') : null;
+        if (!row || !e.target.hasAttribute('data-rule')) return;
+        markRuleDirty(row);
+      });
+      el.rulesBody.addEventListener('change', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('tr[data-category]') : null;
+        if (!row || !e.target.hasAttribute('data-rule')) return;
+        markRuleDirty(row);
+      });
+      el.rulesBody.addEventListener('click', function (e) {
+        var save = e.target && e.target.closest ? e.target.closest('[data-rule-save]') : null;
+        if (!save) return;
+        var row = save.closest('tr[data-category]');
+        if (row) saveRule(row);
+      });
+    }
   }
 
-  function setBusy(btn, busy) {
+  function setBusy(btn, busy, label) {
     if (!btn) return;
     if (busy) {
       if (btn.dataset.original === undefined) btn.dataset.original = btn.innerHTML;
       btn.disabled = true;
       btn.classList.add('is-busy');
-      btn.innerHTML = '<span class="spinner"></span><span class="btn-label">Refreshing…</span>';
+      btn.innerHTML = '<span class="spinner"></span><span class="btn-label">' + S.esc(label || 'Refreshing…') + '</span>';
     } else {
       btn.disabled = false;
       btn.classList.remove('is-busy');

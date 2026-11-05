@@ -109,7 +109,7 @@ Append:
 
 ## 7. Submission kit (no code)
 
-`LICENSE` (MIT), `.env.example`, `.gitignore`, `DEVPOST.md`, `VIDEO-SCRIPT.md` (<3 min), README section "Hackathon submission / AI / PayPal sandbox". `git init` + initial commit (no remote push).
+`LICENSE` (Apache-2.0), `.env.example`, `.gitignore`, `DEVPOST.md`, `VIDEO-SCRIPT.md` (<3 min), README section "Hackathon submission / AI / PayPal sandbox". `git init` + initial commit (no remote push).
 
 ## Acceptance
 - `node --check` all changed JS.

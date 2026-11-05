@@ -70,7 +70,7 @@ If `server.js` is missing the suite exits `1` with `server.js not found … back
 | T35 | claim drains the merchant reserve, then the shortfall is paid from the network pool (reserve 900, 6 × 159 claims → 105 + 54) |
 | T36 | final cleanup reset (leaves seed state) |
 
-78 tests (37 base + 20 v2 + 6 v3 + 6 v4 + 5 v5 + 4 v6), ~11–16 s against a warm server. Last verified green: **78/78, exit 0** on a freshly spawned server (`PORT=4400 node test/e2e.js`) — the server is killed on exit and leaves no listener.
+82 tests (37 base + 20 v2 + 6 v3 + 6 v4 + 5 v5 + 4 v6 + 4 v7), ~12–18 s against a warm server. Last verified green: **82/82, exit 0** on a freshly spawned server (`PORT=4400 node test/e2e.js`) — the server is killed on exit and leaves no listener.
 
 ## v2 coverage — HACKATHON-DEMO-SPEC (agents, contracts, protection, demo)
 
@@ -137,6 +137,15 @@ If `server.js` is missing the suite exits `1` with `server.js not found … back
 | T78 | A2A-style card at **both** `/.well-known/agent-card.json` and `/api/a2a/agent-card`: `protocolVersion 0.2.0`, name `Settled`, description, capabilities, default input/output modes `application/json`, ≥3 skills (`negotiate`/`verify`/`claim`) with tags; both paths serve byte-identical JSON; no private ranges |
 | T79 | `/api/index?sort=trust\|price\|value`: `ranking{sort,basis}` metadata; trust ordering is exactly `m1,m1,m2,m2,m3` (merchant score desc, price tie-break); price ascending; value ordered by `(price − published_min)/price` desc using **published** values only; no private ranges in any sort response; `/api/index/feed` ordering unchanged across sort queries |
 | T80 | `/embed-demo.html` → 200 with the `settled-widget.js` install snippet, `data-merchant`/`data-product`, a PayPal surface and a "what (just) happened" explainer panel (the current copy reads *What just happened?*); `/settled-widget.js` → 200 JS that reads both data attributes, builds `/negotiate.html?merchant=…&product=…`, names no private-range keys and loads no external js/css |
+
+## v7 coverage — INVENTORY-AUTOMATION-SPEC (connector, category rules, windows)
+
+| Test | Covers |
+|---|---|
+| T81 | **connector pull.** `GET /api/merchants/m2/connector` → `{connector, due_at, categories}` with `adapter/url/interval_seconds/enabled/last_sync_at/last_status/last_error/last_counts`; unknown merchant → 404. `PUT` rejects a non-http(s) URL, interval `<60` / `>86400` and an unknown adapter (400 error envelope). Valid `feed` config persists. **Spawns a tiny local HTTP JSON-feed server inside the test**: `POST /catalog/sync` imports 2 products (visible in the merchant catalog and `/api/index`), sets `last_status:"ok"`, ISO `last_sync_at` and `last_counts.imported`; a second mutable response updates 1 by `sku` (price+name) and imports 1 more with no duplicate. A 500 feed is recorded as `last_status:"error"` + `last_error` while `/api/health` stays 200. |
+| T82 | **category rules.** `GET /rules` → `{rules, categories}` with the seed `Audio` rule. `PUT /rules/:category` rejects 6 invalid shapes (sell_min ≥ auto_accept, sell_min < 0.5, auto_accept > 1, publish_min < sell_min, max_discount > 50, non-ISO window) with 400 envelopes. Valid `Audio` rule saves/echoes (`{rule, rules}`) and persists. `POST /rules/apply` re-derives p1/p2 `sell_min/auto_accept/publish_min` from price × 80/90/85 % (listed/negotiable preserved). A **new product and a JSON import in `Audio` inherit the rule**, not the global fallback. |
+| T83 | **negotiation windows.** Open p1 present in `/api/index` + `/api/index/feed`; PATCH `{window:{to:past}}` closes it → gone from both, `POST /api/contracts` → **409 `NEGOTIATION_WINDOW_CLOSED`**; PATCH `{to:future}` reopens → indexed, feed `negotiation_window.to` matches, contract opens. A future `from` is not yet open. **Product window overrides the category rule**: with the Audio category window closed, a product-level open window keeps p1 listed/negotiable while p2 stays excluded; clearing the product window (`window:null`) falls back to the closed category window. |
+| T84 | **UI + privacy.** `/merchant.html` + `/merchant.js`: "Inventory source", "Category rules", "Pull now", connector/rules/sync wiring, "Apply to existing", window from/to + product window-override field, Shopify/Woo roadmap. `/market.html` + `/market.js`: consumes `negotiation_window` and renders "Open until"/"Opens" labels; both UI scripts pass `node --check`. No `sell_min`/`sell_max`/`auto_accept` in market assets or `/api/index`, `/api/index/feed`, `/api/index/manifest`, `/api/categories`; every feed item exposes a public `negotiation_window`.
 
 ## Reading a failure
 
@@ -209,5 +218,17 @@ Every failure prints the assertion that broke and either the exact response body
 - **`value` ranking** is asserted against the computed published discount (non-increasing), not a hardcoded item order, so tie ordering stays free. `trust` **is** pinned to the seed order because §3 fixes merchant-score desc + price.
 - **Feed stability** is asserted by comparing `offer_id` sequences before and after sort queries — ranking must never leak into feed pagination order.
 - **Widget asset purity** is asserted (`no external js/css loads`) and the widget source is scanned for private-range keys; the embed page must contain the install snippet, not just link to it.
+
+### v7 (INVENTORY-AUTOMATION-SPEC) ambiguities the suite resolves conservatively
+
+- **The remote feed is a real local HTTP server.** T81 starts `node:http` on an ephemeral `127.0.0.1` port and points the connector at it, so the pull adapter's real `fetch`/timeout path is exercised without an external dependency. The server is closed in `finally`, even on failure.
+- **`PUT` return shape is not frozen** (`{connector}` vs the bare connector); T81 reads `body.connector || body`. `GET`/`POST sync` shapes are frozen by §1 and asserted strictly.
+- **Sync counters** are read as `sync.counts || sync` because the spec defines both `connector.last_counts` and the `sync` result. Import/update behaviour is additionally asserted by product state (price/name/upsert-by-sku), not counters alone.
+- **A failing adapter pull** is accepted as either a non-2xx error envelope or a 200 carrying sync error info; in both cases the connector must end `last_status:"error"` with a non-empty `last_error` and the server must stay healthy.
+- **Rule percentage rounding.** `apply` may round to whole currency units; T82 compares against `price × pct` with a ±1 unit tolerance while still asserting the ordering invariants.
+- **`window:{from:null,to:null}` and `window:null`** are equivalent "inherit/always-open" values; T82 accepts a stored rule window as `null` or `{from,to}`.
+- **PATCH `{window:null}`** means "drop the item override and inherit the category window" (used by T83 to prove the fallback), while `{window:{from,to}}` sets an explicit item override.
+- **`negotiation_window` exposure is asserted on every feed item** (may be `null` for an unbounded window), and index items are checked through the feed's field instead of pinning an extra key on `/api/index` beyond §3.
+- **Merchant-page markers are matched across `.html` + `.js` combined**, since a panel title can live in either file; the market page is likewise scanned as a pair. Private-range keys are only forbidden in *market* assets — the merchant console legitimately edits them.
 
 If the backend or spec changes, update the assertion and the corresponding row above; keep the `Tnn` ids stable so a failing demo check maps to a known behaviour.

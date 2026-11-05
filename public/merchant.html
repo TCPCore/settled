@@ -73,6 +73,65 @@
 .pr-save.is-busy{color:transparent;position:relative;min-width:54px}
 .pr-save.is-busy::after{content:"";position:absolute;inset:0;margin:auto;width:10px;height:10px;border-radius:50%;border:1.5px solid var(--emerald);border-top-color:transparent;animation:spin .7s linear infinite}
 
+/* negotiation window (per product) */
+.pr-group.window{grid-column:1/-1}
+.pr-group.window .pr-inputs{grid-template-columns:1fr 1fr}
+.pr-group.window .m-input{font-size:9px;padding:5px 6px;color-scheme:dark}
+.pr-window-note{font:600 8px/1.5 var(--mono);color:var(--muted-2);margin-top:5px}
+.pr-window-note b{color:var(--gold);font-weight:650}
+
+/* inventory source */
+.inv-form{padding:13px 16px 0}
+.inv-grid{display:grid;grid-template-columns:150px minmax(0,1fr) 104px 118px;gap:10px;align-items:end}
+.inv-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.inv-field .field-label{display:flex;align-items:center;justify-content:space-between;gap:6px;font:700 8px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted-2)}
+.inv-form .input{width:100%;min-width:0;background:#081120;border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:7px 8px;font-size:11px;line-height:1.35;transition:.15s;color-scheme:dark}
+.inv-form .input:hover{border-color:var(--line-2)}
+.inv-form .input:focus{outline:none;border-color:var(--emerald-line);box-shadow:0 0 0 2px rgba(43,217,160,.1)}
+.inv-form select.input{cursor:pointer;appearance:auto}
+.inv-enabled .switch{align-self:flex-start;margin-top:3px}
+.inv-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:11px;padding-bottom:12px;border-bottom:1px solid rgba(29,44,68,.55)}
+.inv-note{font:600 8px/1.5 var(--mono);color:var(--muted-2);max-width:62ch}
+.inv-buttons{display:flex;gap:8px;flex:none}
+.inv-error{font:600 9px/1.5 var(--mono);color:var(--danger);padding:8px 0 0;min-height:0}
+.inv-error:empty{display:none}
+.inv-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:12px 16px}
+.inv-stats div{border:1px solid rgba(29,44,68,.7);border-radius:8px;background:rgba(8,16,29,.55);padding:8px 9px;min-width:0}
+.inv-stats span{display:block;font:600 7.5px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted-2)}
+.inv-stats b{display:block;font:700 10px var(--mono);color:var(--ink-2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inv-stats b.is-ok{color:var(--emerald)}
+.inv-stats b.is-err{color:var(--danger)}
+.inv-stats b.is-muted{color:var(--muted)}
+.inv-last-error{margin:0 16px 12px;border:1px solid var(--danger-line);background:var(--danger-dim);border-radius:8px;padding:8px 10px;font:600 8.5px/1.5 var(--mono);color:#FFB3B3;overflow-wrap:anywhere}
+.inv-last-error b{color:var(--danger)}
+.inv-unavailable{padding:16px;font:600 9px/1.6 var(--mono);color:var(--muted-2)}
+
+/* category rules */
+.rules-wrap{overflow-x:auto}
+.rules-table{width:100%;border-collapse:collapse;min-width:790px}
+.rules-table th{text-align:left;font:700 8px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted-2);padding:10px 8px;border-bottom:1px solid rgba(29,44,68,.85);white-space:nowrap;background:rgba(9,16,29,.35)}
+.rules-table td{padding:9px 8px;border-bottom:1px solid rgba(29,44,68,.45);vertical-align:middle}
+.rules-table tr:last-child td{border-bottom:0}
+.rules-cat{font:700 10px var(--mono);color:var(--ink-2);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.rules-table .m-input{width:100%;border:1px solid var(--line);background:#081120;color:var(--ink);border-radius:6px;padding:5px 6px;font:600 10px var(--mono);min-width:0;color-scheme:dark}
+.rules-table .m-input:focus{outline:none;border-color:var(--emerald-line);box-shadow:0 0 0 2px rgba(43,217,160,.1)}
+.rules-table .rules-pct{width:74px}
+.rules-table .rules-window{width:148px;font-size:9px}
+.rules-table .switch{font-size:0;gap:0}
+.rules-save{appearance:none;border:1px solid rgba(43,217,160,.45);background:var(--emerald-dim);color:var(--emerald);border-radius:6px;padding:5px 8px;font:700 9px var(--sans);cursor:pointer;white-space:nowrap}
+.rules-save:hover{background:rgba(43,217,160,.2);border-color:var(--emerald-line)}
+.rules-save:disabled{opacity:.5;cursor:not-allowed}
+.rules-row-status{font:600 8px var(--mono);color:var(--muted-2);display:block;margin-top:3px;white-space:nowrap}
+.rules-row-status.dirty{color:var(--gold)}
+.rules-row-status.saved{color:var(--emerald)}
+.rules-row-status.err{color:var(--danger);white-space:normal;max-width:150px}
+.rules-cell-status{text-align:right}
+.rules-error{font:600 9px/1.5 var(--mono);color:var(--danger);padding:0 16px;min-height:0}
+.rules-error:empty{display:none}
+.rules-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 16px;border-top:1px solid rgba(29,44,68,.8);font:600 8.5px/1.5 var(--mono);color:var(--muted-2);flex-wrap:wrap}
+.rules-empty{padding:22px 16px;text-align:center;color:var(--muted-2);font:600 9px/1.7 var(--mono)}
+.rules-empty strong{display:block;color:var(--muted);font:600 12px var(--sans);margin-bottom:4px}
+
 /* add product */
 .add-form{padding:14px 16px 16px}
 .add-grid{display:grid;grid-template-columns:minmax(0,1.3fr) 130px 150px;gap:10px}
@@ -182,6 +241,7 @@
 }
 @media (max-width:1000px){
   .import-grid{grid-template-columns:1fr}
+  .inv-grid{grid-template-columns:1fr 1fr}
 }
 @media (max-width:860px){
   .merchant-hero{flex-direction:column;align-items:flex-start;gap:14px}
@@ -204,6 +264,8 @@
   .pr-head-right{margin-left:0;width:100%;justify-content:space-between}
   .pr-id{flex-basis:calc(100% - 51px)}
   .add-grid{grid-template-columns:1fr}
+  .inv-grid{grid-template-columns:1fr}
+  .inv-stats{grid-template-columns:1fr 1fr}
 }
 </style>
 </head>
@@ -294,6 +356,91 @@
             </div>
           </div>
           <div class="panel-foot"><span id="catalogFoot">Every save updates the in-memory catalog; the index picks it up immediately.</span><span class="mono" id="catalogMerchantId">m1</span></div>
+        </section>
+
+        <section class="panel" id="inventoryPanel">
+          <div class="panel-head">
+            <div style="min-width:0">
+              <div class="panel-title">Inventory source <span class="badge" id="connectorBadge">connector</span></div>
+              <div class="panel-sub">Pull your catalog automatically from a feed, or sync a JSON/CSV payload by hand. Enabled connectors sync on their interval; failures are recorded, never fatal.</div>
+            </div>
+            <span class="badge">GET/PUT /api/merchants/m1/connector</span>
+          </div>
+          <form class="inv-form" id="connectorForm" novalidate>
+            <div class="inv-grid">
+              <div class="inv-field">
+                <label class="field-label" for="connectorAdapter">Adapter</label>
+                <select class="input" id="connectorAdapter">
+                  <option value="feed">Remote JSON feed</option>
+                  <option value="json">JSON payload</option>
+                  <option value="csv">CSV text</option>
+                  <option value="shopify" disabled>Shopify — OAuth roadmap</option>
+                  <option value="woocommerce" disabled>WooCommerce — OAuth roadmap</option>
+                </select>
+              </div>
+              <div class="inv-field">
+                <label class="field-label" for="connectorUrl"><span>Source URL</span><span class="tiny muted" id="connectorUrlHint">feed pulls this URL</span></label>
+                <input class="input" id="connectorUrl" type="url" placeholder="https://merchant.example/catalog.json" autocomplete="off">
+              </div>
+              <div class="inv-field">
+                <label class="field-label" for="connectorInterval">Interval (s)</label>
+                <input class="input" id="connectorInterval" type="number" min="60" max="86400" step="30" value="300">
+              </div>
+              <div class="inv-field inv-enabled">
+                <label class="field-label">Enabled</label>
+                <label class="switch"><input type="checkbox" id="connectorEnabled"><span class="switch-track"></span><span>Auto-pull</span></label>
+              </div>
+            </div>
+            <div class="inv-field" id="connectorDataField" hidden style="margin-top:10px">
+              <label class="field-label" for="connectorData"><span>Manual payload (json/csv)</span><span class="tiny muted" id="connectorDataHint">only used by Pull now</span></label>
+              <textarea class="input" id="connectorData" rows="3" spellcheck="false" placeholder="Paste the JSON payload or CSV text to sync manually"></textarea>
+            </div>
+            <div class="inv-actions">
+              <span class="inv-note">Shopify and WooCommerce are <b>payload adapters</b> today — live OAuth connectors are roadmap. JSON/CSV sources are manual-sync only.</span>
+              <div class="inv-buttons">
+                <button class="btn btn-ghost btn-sm" id="connectorSaveBtn" type="submit">Save source</button>
+                <button class="btn btn-primary btn-sm" id="connectorSyncBtn" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v6h-6"/></svg>
+                  Pull now
+                </button>
+              </div>
+            </div>
+            <div class="inv-error" id="connectorError" role="alert"></div>
+          </form>
+          <div class="inv-stats" aria-live="polite">
+            <div><span>Last sync</span><b id="connectorLastSync">—</b></div>
+            <div><span>Status</span><b id="connectorLastStatus" class="is-muted">never</b></div>
+            <div><span>Last pull</span><b id="connectorCounts">—</b></div>
+            <div><span>Next due</span><b id="connectorDue">—</b></div>
+          </div>
+          <div class="inv-last-error" id="connectorLastError" hidden></div>
+          <div class="panel-foot"><span id="connectorFoot">Last error and counts come from the connector state; the feed is pulled with a 5s server timeout.</span><span class="mono" id="connectorMerchantId">m1</span></div>
+        </section>
+
+        <section class="panel" id="rulesPanel">
+          <div class="panel-head">
+            <div style="min-width:0">
+              <div class="panel-title">Category rules <span class="badge" id="rulesBadge">policy</span></div>
+              <div class="panel-sub">Percentages are off the list price. New and imported items inherit their category rule; Apply re-derives existing items in the category.</div>
+            </div>
+            <div class="catalog-actions">
+              <button class="btn btn-ghost btn-sm" id="rulesRefreshBtn" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v6h-6"/></svg>
+                Refresh
+              </button>
+              <button class="btn btn-primary btn-sm" id="rulesApplyBtn" type="button">Apply to existing items</button>
+            </div>
+          </div>
+          <div class="rules-error" id="rulesError" role="alert"></div>
+          <div class="rules-wrap">
+            <table class="rules-table" aria-label="Category rules">
+              <thead><tr><th>Category</th><th>Negotiable</th><th>Sell min %</th><th>Auto-accept %</th><th>Max discount %</th><th>Window from</th><th>Window to</th><th>Save</th></tr></thead>
+              <tbody id="rulesBody">
+                <tr><td colspan="8" class="import-loading">Loading category rules…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="rules-foot"><span id="rulesFoot">Category windows are inherited by items unless a product override is set.</span><span class="mono" id="rulesMerchantId">m1</span></div>
         </section>
 
         <section class="panel" id="addProductPanel">

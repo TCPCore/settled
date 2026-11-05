@@ -173,6 +173,62 @@
     return parts.length ? parts.join(' · ') : 'Standard merchant terms';
   }
 
+  function timeOf(value) {
+    if (value == null || value === '') return null;
+    var t = new Date(value).getTime();
+    return isFinite(t) ? t : null;
+  }
+
+  // Public negotiation window (never the private floor): {from,to} ISO/null.
+  function windowOf(item) {
+    if (!item || typeof item !== 'object') return null;
+    var w = item.negotiation_window;
+    if (!w && item.product) {
+      w = item.product.negotiation_window ||
+        (item.product.negotiation && item.product.negotiation.window);
+    }
+    if (!w || typeof w !== 'object') return null;
+    var from = timeOf(w.from);
+    var to = timeOf(w.to);
+    if (from == null && to == null) return null;
+    return { from: from, to: to };
+  }
+
+  function formatWhen(ts, withTime) {
+    if (ts == null) return '';
+    var d = new Date(ts);
+    var opts = { month: 'short', day: 'numeric' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    if (withTime) { opts.hour = 'numeric'; opts.minute = '2-digit'; }
+    try {
+      return d.toLocaleString('en-US', opts);
+    } catch (e) {
+      return d.toISOString().slice(0, withTime ? 16 : 10).replace('T', ' ');
+    }
+  }
+
+  function windowInfo(item) {
+    var w = windowOf(item);
+    if (!w) return null;
+    var now = Date.now();
+    if (w.from != null && w.from > now) {
+      return {
+        cls: 'is-upcoming',
+        text: 'Opens ' + formatWhen(w.from, false),
+        title: 'Negotiation opens ' + formatWhen(w.from, true) +
+          (w.to != null ? ' and closes ' + formatWhen(w.to, true) : '')
+      };
+    }
+    if (w.to != null) {
+      return {
+        cls: 'is-open',
+        text: 'Open until ' + formatWhen(w.to, true),
+        title: 'Negotiation open through ' + formatWhen(w.to, true)
+      };
+    }
+    return { cls: 'is-open', text: 'Open now', title: 'Negotiation window has no closing time' };
+  }
+
   function negotiateUrl(item) {
     if (item.negotiate_url) return String(item.negotiate_url);
     var m = item.merchant || {};
@@ -219,6 +275,7 @@
     var coverage = num(m.coverage);
     var protection = protectionOf(item);
     var range = rangeOf(item);
+    var win = windowInfo(item);
     var category = p.category || m.category || '';
     var coverageText = coverage != null
       ? (coverage <= 1 ? Math.round(coverage * 100) + '% coverage' : Math.round(coverage) + '% coverage')
@@ -260,6 +317,15 @@
           '</div>' +
         '</div>' +
         '<div class="mkt-meta">' +
+          (win ? '<div class="mkt-meta-row mkt-window-row">' +
+            '<span class="mkt-k">Window</span>' +
+            '<span class="mkt-v">' +
+              '<span class="mkt-window ' + win.cls + '" data-window="' + (win.cls === 'is-upcoming' ? 'opens' : 'open-until') + '" title="' + esc(win.title) + '">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.2l2.7 1.6"/></svg>' +
+                esc(win.text) +
+              '</span>' +
+            '</span>' +
+          '</div>' : '') +
           '<div class="mkt-meta-row"><span class="mkt-k">Protection</span>' +
             '<span class="mkt-v">' + modeChip(protection.mode) + '<span class="mono">' + esc(protText) + '</span></span></div>' +
           '<div class="mkt-meta-row"><span class="mkt-k">Terms</span>' +
@@ -315,7 +381,7 @@
         '</div>' +
         '<div class="mkt-state-title">' + (hasFilters ? 'No negotiable products match those filters' : 'No negotiable products yet') + '</div>' +
         '<div class="mkt-state-sub">' + (hasFilters
-          ? 'Try a broader search, a higher budget, or another category. Only products the merchant marked as listed and negotiable appear here.'
+          ? 'Try a broader search, a higher budget, or another category. Only products the merchant marked as listed and negotiable, and that are inside their negotiation window, appear here.'
           : 'Merchants publish negotiable inventory here. Once one lists a product with a published range, it will show up in this index.') + '</div>' +
         (hasFilters ? '<button class="btn btn-ghost btn-sm" type="button" data-action="clear-filters">Clear filters</button>' : '') +
       '</div>';

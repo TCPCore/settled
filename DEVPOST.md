@@ -5,7 +5,7 @@
 **PayPal's merchant negotiation desk for the agent economy.** A PayPal-native tool that lets a merchant publish its policy, trust credential and protection terms, then let its merchant agent negotiate with any consumer's personal AI — visible offer/counter/accept, a signed Agent Commerce Contract, PayPal settlement, and a buyer claim paid from the merchant's reserve in about a second. The human trade ritual — trust, haggle, contract, guarantee, refund — at machine speed, with an audit trail.
 
 > **Links (fill before submitting)**
-> - Repo: https://github.com/cptlight/bit-settled (MIT — see [LICENSE](LICENSE))
+> - Repo: https://github.com/cptlight/bit-settled (Apache-2.0 — see [LICENSE](LICENSE))
 > - Demo video (<3 min, YouTube): `VIDEO_URL_HERE`
 > - Run it locally: `node server.js` → `http://127.0.0.1:4173/demo.html`
 > - Long-form write-up: [WRITEUP.md](WRITEUP.md) · judge brief: [JUDGE-BRIEF.md](JUDGE-BRIEF.md)
@@ -99,7 +99,7 @@ We would rather say this first.
 - AI negotiation that is genuinely constrained: same accepted price on the deterministic path, model-generated transcript when a key is present, no scenario where the model can exceed the mandate.
 - Real PayPal sandbox money path in the same app as the SIM fallback, with clean failures.
 - A working refund in ~1.2s that updates reserve, score and tier in the same screen — the moment the pitch turns on.
-- The full e2e suite passing locally with zero external dependencies: **78/78 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
+- The full e2e suite passing locally with zero external dependencies: **82/82 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
 
 ## What we learned
 
@@ -131,4 +131,4 @@ Click **Reset**, then **Run full demo**. With no `.env`, everything is SIM and d
 
 ## License
 
-MIT — [LICENSE](LICENSE). "Settled" is a hackathon prototype; nothing here is financial, insurance or legal advice.
+Apache-2.0 — [LICENSE](LICENSE). "Settled" is a hackathon prototype; nothing here is financial, insurance or legal advice.

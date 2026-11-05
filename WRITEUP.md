@@ -126,14 +126,14 @@
 
 **Yes — with an honest boundary.**
 
-**Real (runs on `node server.js`, 78/78 e2e tests):**
+**Real (runs on `node server.js`, 82/82 e2e tests):**
 - HMAC-signed merchant credential + SHA-256 event hash chain.
 - Risk engine: score, tier, fee bps, cap, payment mode; 35/90/150 bps; $5k/$2.5k/$1k caps; instant/reserve/escrow/decline.
 - Agent passport: seeded agents, operator KYB, signed mandate, spend limits, reputation; RogueBot rejected **before** an order exists.
 - Negotiable contract: offer/counter/accept, deterministic seller policy, signed hash, terms.
 - Protection quote; order at the agreed price; reserve accounting; buyer/agent claim; instant refund from reserve; claims list.
 - PayPal adapter: OAuth2 + Orders v2 create/capture + approval URL; `/api/paypal/capture`; falls back to SIM.
-- Demo console: `/demo.html` runs the 5 steps end-to-end, scorecard 5/5 green, live JSON log; 78/78 tests.
+- Demo console: `/demo.html` runs the 5 steps end-to-end, scorecard 5/5 green, live JSON log; 82/82 tests.
 
 **Simulated by default (say it):**
 - Payment ids (`SIM-…`), delivery confirmation, KYB, the $25k network pool, and the claim's PayPal refund id.

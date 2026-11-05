@@ -2058,6 +2058,385 @@ async function main() {
     }
     return `embed-demo ${embed.text.length}B, widget ${w.text.length}B with merchant/product URL builder`;
   });
+
+  // =========================================================================
+  // v7 — inventory automation: connector pull, category rules, windows
+  // (INVENTORY-AUTOMATION-SPEC.md)
+  // =========================================================================
+  await reset();
+
+  const isoFromNow = (ms) => new Date(Date.now() + ms).toISOString();
+  const sameInstant = (a, b) => typeof a === 'string' && typeof b === 'string' && Date.parse(a) === Date.parse(b);
+
+  async function startFeedServer(initial) {
+    const httpMod = require('node:http');
+    const feed = { status: 200, body: initial };
+    const server = httpMod.createServer((req, res) => {
+      res.writeHead(feed.status, { 'content-type': 'application/json' });
+      res.end(typeof feed.body === 'string' ? feed.body : JSON.stringify(feed.body));
+    });
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    return { server, feed, url: `http://127.0.0.1:${server.address().port}/catalog.json` };
+  }
+
+  async function closeFeedServer(server) {
+    if (!server) return;
+    if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+    await new Promise((resolve) => server.close(() => resolve()));
+  }
+
+  const ruleOf = (rules, category) => {
+    if (Array.isArray(rules)) {
+      return rules.find((r) => String((r && (r.category || r.id)) || '').toLowerCase() === String(category).toLowerCase()) || null;
+    }
+    return (rules && rules[category]) || null;
+  };
+
+  await test('T81', 'v7 connector GET/PUT validation + sync from a local JSON feed (import/update, status/counts)', async () => {
+    const putConnector = (body) => http('PUT', '/api/merchants/m2/connector', { body });
+
+    const before = await get('/api/merchants/m2/connector');
+    eq(before.status, 200, 'GET connector status');
+    hasKeys(before.json, ['connector', 'due_at', 'categories'], 'connector response');
+    hasKeys(
+      before.json.connector,
+      ['adapter', 'url', 'interval_seconds', 'enabled', 'last_sync_at', 'last_status', 'last_error', 'last_counts'],
+      'connector config'
+    );
+    assert(
+      ['ok', 'error', 'never'].includes(String(before.json.connector.last_status)),
+      `connector.last_status must be ok|error|never, got ${JSON.stringify(before.json.connector.last_status)}`
+    );
+    hasKeys(before.json.connector.last_counts, ['imported', 'updated', 'skipped'], 'connector.last_counts');
+    assert(Array.isArray(before.json.categories), `connector.categories must be an array, got ${JSON.stringify(before.json.categories)}`);
+
+    const unknown = await get('/api/merchants/zzz/connector');
+    assertErrorShape(unknown, 404, 'connector for unknown merchant');
+
+    const invalid = [
+      [{ adapter: 'feed', url: 'ftp://merchant.example/catalog.json', interval_seconds: 300, enabled: true }, 'non-http(s) url'],
+      [{ adapter: 'feed', url: 'http://merchant.example/catalog.json', interval_seconds: 30, enabled: true }, 'interval < 60'],
+      [{ adapter: 'feed', url: 'http://merchant.example/catalog.json', interval_seconds: 90000, enabled: true }, 'interval > 86400'],
+      [{ adapter: 'webhook', url: 'http://merchant.example/catalog.json', interval_seconds: 300, enabled: true }, 'unknown adapter'],
+    ];
+    const seen = [];
+    for (const [body, label] of invalid) {
+      seen.push(assertErrorShape(await putConnector(body), 400, `PUT connector ${label}`));
+    }
+
+    const feedSrv = await startFeedServer({
+      products: [
+        { sku: 'SYNC-1', name: 'Synced Sconce', price: 100, category: 'Lighting', description: 'pulled one' },
+        { sku: 'SYNC-2', name: 'Synced Pendant', price: 50, category: 'Lighting', description: 'pulled two' },
+      ],
+    });
+    try {
+      const saved = await putConnector({ adapter: 'feed', url: feedSrv.url, interval_seconds: 60, enabled: true });
+      eq(saved.status, 200, 'PUT valid connector status');
+      const cfg = saved.json.connector || saved.json;
+      eq(cfg.adapter, 'feed', 'connector.adapter echo');
+      eq(cfg.url, feedSrv.url, 'connector.url echo');
+      eq(num(cfg.interval_seconds), 60, 'connector.interval_seconds echo');
+      eq(cfg.enabled, true, 'connector.enabled echo');
+
+      const afterPut = await get('/api/merchants/m2/connector');
+      eq(afterPut.status, 200, 'GET connector after PUT status');
+      const c1 = afterPut.json.connector;
+      eq(c1.adapter, 'feed', 'persisted adapter');
+      eq(c1.url, feedSrv.url, 'persisted url');
+      eq(num(c1.interval_seconds), 60, 'persisted interval');
+      eq(c1.enabled, true, 'persisted enabled');
+      assert(afterPut.json.due_at === null || isIso(afterPut.json.due_at), `due_at must be ISO or null, got ${JSON.stringify(afterPut.json.due_at)}`);
+      const cats = (afterPut.json.categories || []).map((c) => String(c && c.id ? c.id : c).toLowerCase());
+      assert(cats.includes('lighting'), `connector.categories must include the merchant's categories (Lighting); got ${JSON.stringify(afterPut.json.categories)}`);
+
+      const sync1 = await post('/api/merchants/m2/catalog/sync', {});
+      eq(sync1.status, 200, 'POST catalog/sync status');
+      hasKeys(sync1.json, ['connector', 'sync'], 'sync response');
+      const counts1 = sync1.json.sync.counts || sync1.json.sync;
+      assert(num(counts1.imported) >= 2, `first sync must import >=2 products, got ${JSON.stringify(counts1)}`);
+      if (Array.isArray(sync1.json.sync.errors)) {
+        eq(sync1.json.sync.errors.length, 0, `first sync must not report errors: ${JSON.stringify(sync1.json.sync.errors)}`);
+      }
+      const catalog1 = await get('/api/merchants/m2/catalog');
+      eq(catalog1.status, 200, 'm2 catalog after sync');
+      const sconce = (catalog1.json.products || []).find((p) => p.sku === 'SYNC-1');
+      assert(sconce, `synced product SYNC-1 missing from catalog; skus: ${(catalog1.json.products || []).map((p) => p.sku).join(', ')}`);
+      near(sconce.price, 100, 'synced price');
+
+      const idx1 = await get('/api/index?merchant=m2');
+      eq(idx1.status, 200, 'index after sync');
+      assert((idx1.json.items || []).some((i) => i.product.name === 'Synced Sconce'), 'synced product must appear in /api/index');
+      assertNoPrivate(idx1.json, '/api/index after connector sync');
+
+      const cAfterSync = (await get('/api/merchants/m2/connector')).json.connector;
+      eq(cAfterSync.last_status, 'ok', 'connector.last_status after successful sync');
+      assert(isIso(cAfterSync.last_sync_at), `connector.last_sync_at must be ISO after sync, got ${JSON.stringify(cAfterSync.last_sync_at)}`);
+      assert(
+        num(cAfterSync.last_counts.imported) >= 2,
+        `connector.last_counts.imported must reflect the pull, got ${JSON.stringify(cAfterSync.last_counts)}`
+      );
+
+      // Update path: one price move + one name change, one brand-new sku.
+      feedSrv.feed.body = {
+        products: [
+          { sku: 'SYNC-1', name: 'Synced Sconce mk2', price: 120, category: 'Lighting' },
+          { sku: 'SYNC-2', name: 'Synced Pendant', price: 50, category: 'Lighting' },
+          { sku: 'SYNC-3', name: 'Synced Uplight', price: 60, category: 'Lighting' },
+        ],
+      };
+      const sync2 = await post('/api/merchants/m2/catalog/sync', {});
+      eq(sync2.status, 200, 'second sync status');
+      const counts2 = sync2.json.sync.counts || sync2.json.sync;
+      assert(num(counts2.updated) >= 1, `second sync must update >=1 existing product, got ${JSON.stringify(counts2)}`);
+      assert(num(counts2.imported) >= 1, `second sync must import >=1 new product, got ${JSON.stringify(counts2)}`);
+      const catalog2 = await get('/api/merchants/m2/catalog');
+      const sconce2 = (catalog2.json.products || []).filter((p) => p.sku === 'SYNC-1');
+      eq(sconce2.length, 1, 'upsert by sku must not duplicate SYNC-1');
+      near(sconce2[0].price, 120, 'upserted price');
+      eq(sconce2[0].name, 'Synced Sconce mk2', 'upserted name');
+
+      // Failure path: a failing feed is recorded on the connector and never crashes the server.
+      feedSrv.feed.status = 500;
+      const failedSync = await post('/api/merchants/m2/catalog/sync', {});
+      if (failedSync.status === 200) {
+        const syncObj = failedSync.json.sync || {};
+        assert(
+          Boolean(syncObj.error) || (Array.isArray(syncObj.errors) && syncObj.errors.length > 0) || (failedSync.json.connector && failedSync.json.connector.last_status === 'error'),
+          `failed sync must report an error, got ${JSON.stringify(failedSync.json).slice(0, 400)}`
+        );
+      } else {
+        assertErrorShape(failedSync, [400, 500, 502, 503], 'sync from a failing feed');
+      }
+      const cErr = (await get('/api/merchants/m2/connector')).json.connector;
+      eq(cErr.last_status, 'error', 'connector.last_status after failed sync');
+      assert(typeof cErr.last_error === 'string' && cErr.last_error.length > 0, `connector.last_error must be a message, got ${JSON.stringify(cErr.last_error)}`);
+      eq((await get('/api/health')).status, 200, 'server must stay healthy after a failed sync');
+      await putConnector({ adapter: 'feed', url: feedSrv.url, interval_seconds: 60, enabled: false });
+    } finally {
+      await closeFeedServer(feedSrv.server);
+    }
+    await reset();
+    return `GET/PUT validated (${seen.join(', ')}); sync imported 2 then updated 1/imported 1; failure recorded, server healthy`;
+  });
+
+  await test('T82', 'v7 category rule PUT validation + apply re-derives ranges + new product inherits', async () => {
+    const putRule = (category, body) => http('PUT', `/api/merchants/m1/rules/${encodeURIComponent(category)}`, { body });
+
+    const got = await get('/api/merchants/m1/rules');
+    eq(got.status, 200, 'GET rules status');
+    hasKeys(got.json, ['rules', 'categories'], 'rules response');
+    assert(Array.isArray(got.json.categories), `rules.categories must be an array, got ${JSON.stringify(got.json.categories)}`);
+    const audio = ruleOf(got.json.rules, 'Audio');
+    assert(audio, `seed Audio category rule missing; rules: ${JSON.stringify(got.json.rules).slice(0, 300)}`);
+    for (const k of ['negotiable', 'sell_min_pct', 'auto_accept_pct', 'publish_min_pct', 'max_discount_pct']) {
+      assert(audio[k] !== undefined, `seed Audio rule missing ${k}: ${JSON.stringify(audio)}`);
+    }
+
+    const invalid = [
+      [{ sell_min_pct: 0.9, auto_accept_pct: 0.85, publish_min_pct: 0.9, max_discount_pct: 18 }, 'sell_min_pct >= auto_accept_pct'],
+      [{ sell_min_pct: 0.4, auto_accept_pct: 0.95, publish_min_pct: 0.5, max_discount_pct: 18 }, 'sell_min_pct < 0.5'],
+      [{ sell_min_pct: 0.82, auto_accept_pct: 1.2, publish_min_pct: 0.86, max_discount_pct: 18 }, 'auto_accept_pct > 1'],
+      [{ sell_min_pct: 0.82, auto_accept_pct: 0.95, publish_min_pct: 0.7, max_discount_pct: 18 }, 'publish_min_pct < sell_min_pct'],
+      [{ sell_min_pct: 0.82, auto_accept_pct: 0.95, publish_min_pct: 0.86, max_discount_pct: 60 }, 'max_discount_pct > 50'],
+      [{ sell_min_pct: 0.82, auto_accept_pct: 0.95, publish_min_pct: 0.86, max_discount_pct: 18, window: { from: 'not-a-date', to: null } }, 'non-ISO window'],
+    ];
+    const seen = [];
+    for (const [body, label] of invalid) seen.push(assertErrorShape(await putRule('Audio', body), 400, `PUT rule ${label}`));
+
+    const body = { negotiable: true, sell_min_pct: 0.8, auto_accept_pct: 0.9, publish_min_pct: 0.85, max_discount_pct: 20, window: { from: null, to: null } };
+    const saved = await putRule('Audio', body);
+    eq(saved.status, 200, 'PUT valid rule status');
+    hasKeys(saved.json, ['rule', 'rules'], 'rule save response');
+    const rule = saved.json.rule;
+    near(rule.sell_min_pct, 0.8, 'rule.sell_min_pct');
+    near(rule.auto_accept_pct, 0.9, 'rule.auto_accept_pct');
+    near(rule.publish_min_pct, 0.85, 'rule.publish_min_pct');
+    eq(num(rule.max_discount_pct), 20, 'rule.max_discount_pct');
+    eq(rule.negotiable, true, 'rule.negotiable');
+    assert(rule.window === null || (isObj(rule.window) && 'from' in rule.window && 'to' in rule.window), `rule.window must be null or {from,to}, got ${JSON.stringify(rule.window)}`);
+    const reread = ruleOf((await get('/api/merchants/m1/rules')).json.rules, 'Audio');
+    near(reread.sell_min_pct, 0.8, 'persisted Audio sell_min_pct');
+
+    const applied = await post('/api/merchants/m1/rules/apply', { category: 'Audio' });
+    eq(applied.status, 200, 'POST rules/apply status');
+    const afterApply = await get('/api/merchants/m1/catalog');
+    eq(afterApply.status, 200, 'catalog after apply');
+    for (const pid of ['p1', 'p2']) {
+      const p = (afterApply.json.products || []).find((x) => x.id === pid);
+      assert(p && p.negotiation, `product ${pid} missing negotiation after apply`);
+      const n = p.negotiation;
+      near(n.sell_min, p.price * 0.8, `${pid}.sell_min from 80% rule`, 1);
+      near(n.auto_accept, p.price * 0.9, `${pid}.auto_accept from 90% rule`, 1);
+      near(n.publish_min, p.price * 0.85, `${pid}.publish_min from 85% rule`, 1);
+      assert(n.sell_min < n.auto_accept && n.auto_accept <= n.sell_max, `${pid} range ordering broken: ${JSON.stringify(n)}`);
+      eq(n.negotiable, true, `${pid}.negotiable preserved`);
+      eq(n.listed, true, `${pid}.listed preserved`);
+    }
+
+    const created = await post('/api/merchants/m1/catalog', { name: 'Rule Inheritor', price: 200, category: 'Audio', description: 'inherits the Audio rule' });
+    eq(created.status, 200, 'POST catalog (new product) status');
+    const np = created.json.product;
+    assert(np && np.negotiation, 'new product must carry a negotiation');
+    near(np.negotiation.sell_min, 160, 'new product sell_min (80% of 200)', 1);
+    near(np.negotiation.auto_accept, 180, 'new product auto_accept (90% of 200)', 1);
+    near(np.negotiation.publish_min, 170, 'new product publish_min (85% of 200)', 1);
+
+    const imported = await post('/api/merchants/m1/catalog/import', {
+      adapter: 'json',
+      data: { products: [{ sku: 'RULE-IMP-1', name: 'Rule Import', price: 100, category: 'Audio' }] },
+    });
+    eq(imported.status, 200, 'import under Audio rule status');
+    const catImp = await get('/api/merchants/m1/catalog');
+    const imp = (catImp.json.products || []).find((p) => p.sku === 'RULE-IMP-1');
+    assert(imp && imp.negotiation, 'imported product must carry a negotiation');
+    near(imp.negotiation.sell_min, 80, 'imported sell_min (80% of 100)', 1);
+    near(imp.negotiation.auto_accept, 90, 'imported auto_accept (90% of 100)', 1);
+    near(imp.negotiation.publish_min, 85, 'imported publish_min (85% of 100)', 1);
+
+    assertNoPrivate((await get('/api/index?merchant=m1')).json, '/api/index after rule apply');
+    await reset();
+    return `validated ${seen.join(', ')}; Audio 80/90/85 re-derived on p1+p2; new + imported items inherited`;
+  });
+
+  await test('T83', 'v7 negotiation windows: closed excluded + 409; reopen; product overrides category', async () => {
+    const putRule = (body) => http('PUT', '/api/merchants/m1/rules/Audio', { body });
+    const patchP1 = (body) => http('PATCH', '/api/merchants/m1/catalog/p1', { body });
+    const baseRule = { negotiable: true, sell_min_pct: 0.82, auto_accept_pct: 0.95, publish_min_pct: 0.86, max_discount_pct: 18, window: { from: null, to: null } };
+    eq((await putRule(baseRule)).status, 200, 'set Audio rule always-open');
+    const past = isoFromNow(-3600 * 1000);
+    const future = isoFromNow(3600 * 1000);
+
+    const indexItems = async () => {
+      const r = await get('/api/index?merchant=m1&limit=50');
+      eq(r.status, 200, '/api/index?merchant=m1 status');
+      return r.json.items || [];
+    };
+    const indexHasP1 = async () => (await indexItems()).some((i) => i.product.id === 'p1');
+    const feedOffer = async () => {
+      const r = await get('/api/index/feed?merchant=m1&limit=50');
+      eq(r.status, 200, 'feed status');
+      return (r.json.items || []).find((i) => i.offer_id === 'm1:p1');
+    };
+
+    assert(await indexHasP1(), 'p1 must be listed while the window is open');
+
+    const closed = await patchP1({ window: { from: null, to: past } });
+    eq(closed.status, 200, 'PATCH p1 window closed status');
+    assert(!(await indexHasP1()), 'p1 with a closed window must be excluded from /api/index');
+    assert(!(await feedOffer()), 'p1 with a closed window must be excluded from /api/index/feed');
+    const rejected = await post('/api/contracts', { merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' });
+    eq(assertErrorShape(rejected, 409, 'contract on closed window'), '409 NEGOTIATION_WINDOW_CLOSED');
+    eq(String(rejected.json.error.code), 'NEGOTIATION_WINDOW_CLOSED', 'window error code');
+
+    const reopened = await patchP1({ window: { from: null, to: future } });
+    eq(reopened.status, 200, 'PATCH p1 window reopen status');
+    assert(await indexHasP1(), 'reopened p1 must return to /api/index');
+    const reopenedItem = await feedOffer();
+    assert(reopenedItem, 'reopened p1 must return to /api/index/feed');
+    hasKeys(reopenedItem, ['negotiation_window'], 'feed item window');
+    assert(reopenedItem.negotiation_window && typeof reopenedItem.negotiation_window === 'object', `feed negotiation_window must be a public object, got ${JSON.stringify(reopenedItem.negotiation_window)}`);
+    assert(
+      sameInstant(reopenedItem.negotiation_window.to, future),
+      `feed negotiation_window.to: expected ${future}, got ${JSON.stringify(reopenedItem.negotiation_window.to)}`
+    );
+    eq((await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' })).status, 'open', 'contract must open inside the window');
+
+    const upcoming = await patchP1({ window: { from: future, to: null } });
+    eq(upcoming.status, 200, 'PATCH p1 upcoming window status');
+    assert(!(await indexHasP1()), 'p1 whose window starts in the future must be excluded');
+    assertErrorShape(await post('/api/contracts', { merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' }), 409, 'contract before the window opens');
+
+    eq((await putRule({ ...baseRule, window: { from: null, to: past } })).status, 200, 'close the Audio category window');
+    assert(!(await indexHasP1()), 'p1 must inherit the closed Audio category window');
+    const override = await patchP1({ window: { from: null, to: future } });
+    eq(override.status, 200, 'PATCH p1 product window override status');
+    const idsOverride = (await indexItems()).map((i) => i.product.id);
+    assert(idsOverride.includes('p1'), 'product window override must beat a closed category window');
+    assert(!idsOverride.includes('p2'), 'p2 must stay excluded while the Audio category window is closed');
+    eq((await createContract({ merchant_id: 'm1', product_id: 'p1', buyer_agent_id: 'a1' })).status, 'open', 'p1 contract opens via product window override');
+    eq(
+      assertErrorShape(await post('/api/contracts', { merchant_id: 'm1', product_id: 'p2', buyer_agent_id: 'a1' }), 409, 'p2 contract under closed category window'),
+      '409 NEGOTIATION_WINDOW_CLOSED'
+    );
+
+    const inherited = await patchP1({ window: null });
+    eq(inherited.status, 200, 'PATCH p1 window null (inherit category) status');
+    assert(!(await indexHasP1()), 'clearing the product window must fall back to the closed category window');
+    await reset();
+    return 'open→indexed; closed→excluded+409 NEGOTIATION_WINDOW_CLOSED; reopen→indexed; product override beats closed category';
+  });
+
+  await test('T84', 'v7 merchant UI markers + market window label + no private-range leak', async () => {
+    const merchantHtml = await get('/merchant.html');
+    eq(merchantHtml.status, 200, 'merchant.html status');
+    const merchantJs = await get('/merchant.js');
+    eq(merchantJs.status, 200, 'merchant.js status');
+    const merchantSrc = `${merchantHtml.text}\n${merchantJs.text}`;
+    const merchantMarkers = [
+      [/inventory source/i, 'Inventory source panel'],
+      [/category rules/i, 'Category rules panel'],
+      [/pull now/i, 'Pull now button'],
+      [/\/connector/, 'connector GET/PUT wiring'],
+      [/\/rules/, 'category-rules wiring'],
+      [/\/catalog\/sync/, 'catalog sync wiring'],
+      [/apply to existing/i, 'apply-to-existing action'],
+      [/window from/i, 'window-from field'],
+      [/window to/i, 'window-to field'],
+      [/shopify/i, 'Shopify adapter option/roadmap'],
+      [/woo/i, 'WooCommerce adapter option/roadmap'],
+    ];
+    for (const [re, label] of merchantMarkers) {
+      assert(re.test(merchantSrc), `merchant UI missing ${label} marker (merchant.html ${merchantHtml.text.length}B + merchant.js ${merchantJs.text.length}B)`);
+    }
+    assert(/datetime-local|window override|pr-group window/i.test(merchantSrc), 'merchant UI must render a product negotiation-window override field');
+
+    const marketHtml = await get('/market.html');
+    eq(marketHtml.status, 200, 'market.html status');
+    const marketJs = await get('/market.js');
+    eq(marketJs.status, 200, 'market.js status');
+    const marketSrc = `${marketHtml.text}\n${marketJs.text}`;
+    assert(/negotiation_window/.test(marketSrc), 'market must consume the public negotiation_window');
+    assert(/open until/i.test(marketSrc), 'market must render an "Open until" window label');
+    assert(/opens\s/i.test(marketSrc), 'market must render an upcoming "Opens …" window label');
+    // Privacy is about *using* the private range, not naming it in a comment:
+    // flag property access, a string-literal key, or an object key, but allow
+    // prose such as "the private floor (sell_min/sell_max/auto_accept) is never emitted".
+    for (const f of PRIVATE_KEYS) {
+      const used = new RegExp(`(?:\\.${f}\\b|["'\`]${f}["'\`]|\\b${f}\\s*:)`);
+      assert(!used.test(marketSrc), `PRIVATE RANGE LEAK: "${f}" is used in market assets`, {
+        context: (marketSrc.match(new RegExp(`.{0,80}${f}.{0,80}`)) || [''])[0],
+      });
+    }
+
+    const { spawnSync } = require('node:child_process');
+    const bad = [];
+    for (const rel of ['public/merchant.js', 'public/market.js']) {
+      const r = spawnSync(process.execPath, ['--check', path.join(ROOT, rel)], { encoding: 'utf8' });
+      if (r.status !== 0) bad.push(`${rel}: ${String(r.stderr || '').trim().split('\n')[0]}`);
+    }
+    assert(bad.length === 0, `node --check failed on UI assets: ${bad.join(' | ')}`);
+
+    for (const pathname of ['/api/index', '/api/index/feed?limit=50', '/api/index/manifest', '/api/categories']) {
+      const r = await get(pathname);
+      eq(r.status, 200, `${pathname} status`);
+      assertNoPrivate(r.json, pathname);
+    }
+    const feed = await get('/api/index/feed?limit=50');
+    for (const it of feed.json.items || []) {
+      hasKeys(it, ['negotiation_window'], `feed item ${it.offer_id}`);
+      const w = it.negotiation_window;
+      if (w !== null && w !== undefined) hasKeys(w, ['from', 'to'], `feed item ${it.offer_id}.negotiation_window`);
+    }
+
+    await reset();
+    const finalIdx = await get('/api/index');
+    eq((finalIdx.json.items || []).length, 5, 'final reset must restore 5 seed index items');
+    return `merchant ${merchantHtml.text.length}B+${merchantJs.text.length}B; market ${marketHtml.text.length}B+${marketJs.text.length}B; window public; no private-range leak`;
+  });
 }
 
 // ---------------------------------------------------------------------------

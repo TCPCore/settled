@@ -23,6 +23,7 @@ const contracts = require('./lib/contract');
 const protection = require('./lib/protection');
 const catalog = require('./lib/catalog');
 const adapters = require('./lib/adapters');
+const connectors = require('./lib/connectors');
 const ai = require('./lib/ai');
 
 /**
@@ -729,6 +730,25 @@ function handleAgentPassport(req, res, agentId) {
 
 async function handleCreateContract(req, res) {
   const body = await readJson(req);
+  // Negotiation is only available inside the effective window (product override
+  // beats the merchant's category rule). Closed -> 409, checked before create.
+  if (typeof body.merchant_id === 'string' && typeof body.product_id === 'string') {
+    const merchant = data.getMerchant(body.merchant_id);
+    const product = merchant ? data.getProduct(merchant, body.product_id) : null;
+    if (merchant && product) {
+      const window = data.effectiveWindow(product, merchant);
+      if (!data.windowOpen(window)) {
+        return fail(
+          res,
+          409,
+          'NEGOTIATION_WINDOW_CLOSED',
+          `negotiation for product '${product.id}' is closed${
+            window && window.to ? ` (window ended ${window.to})` : ''
+          }`
+        );
+      }
+    }
+  }
   const contract = contracts.create(body);
   sendJson(res, 200, { contract });
 }
@@ -856,12 +876,40 @@ function handleAdapters(req, res) {
 
 async function handleCatalogImport(req, res, merchantId) {
   const body = await readJson(req);
-  sendJson(res, 200, await adapters.importInto(merchantId, body));
+  // Import through the connector layer so imports inherit category rules.
+  sendJson(res, 200, await connectors.importInto(merchantId, body));
 }
 
 async function handleCatalogSync(req, res, merchantId) {
   const body = await readJson(req);
-  sendJson(res, 200, await adapters.syncFrom(merchantId, body));
+  sendJson(res, 200, await connectors.syncNow(merchantId, body));
+}
+
+// ------------------------------------------------ inventory connector (§1) --
+
+function handleConnectorGet(req, res, merchantId) {
+  sendJson(res, 200, connectors.getConnector(merchantId));
+}
+
+async function handleConnectorPut(req, res, merchantId) {
+  const body = await readJson(req);
+  sendJson(res, 200, connectors.putConnector(merchantId, body));
+}
+
+// ------------------------------------------------- category rules (§2) -----
+
+function handleRulesGet(req, res, merchantId) {
+  sendJson(res, 200, catalog.getRules(merchantId));
+}
+
+async function handleRulePut(req, res, merchantId, category) {
+  const body = await readJson(req);
+  sendJson(res, 200, catalog.putCategoryRule(merchantId, category, body));
+}
+
+async function handleRulesApply(req, res, merchantId) {
+  const body = await readJson(req);
+  sendJson(res, 200, catalog.applyRules(merchantId, body));
 }
 
 function handleIndexManifest(req, res) {
@@ -1054,7 +1102,7 @@ const server = http.createServer(async (req, res) => {
     if (method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       return res.end();
@@ -1118,11 +1166,18 @@ async function routeApi(req, res, method, pathname, query) {
       if (sub === 'agent' && method === 'GET') return handleCatalogGetAgent(req, res, id);
       if (sub === 'catalog' && method === 'GET') return handleCatalogGet(req, res, id);
       if (sub === 'catalog' && method === 'POST') return handleCatalogCreate(req, res, id);
+      if (sub === 'connector' && method === 'GET') return handleConnectorGet(req, res, id);
+      if (sub === 'connector' && method === 'PUT') return handleConnectorPut(req, res, id);
+      if (sub === 'rules' && method === 'GET') return handleRulesGet(req, res, id);
     }
     if (seg.length === 5 && seg[3] === 'catalog') {
       if (seg[4] === 'import' && method === 'POST') return handleCatalogImport(req, res, id);
       if (seg[4] === 'sync' && method === 'POST') return handleCatalogSync(req, res, id);
       if (method === 'PATCH') return handleCatalogUpdate(req, res, id, seg[4]);
+    }
+    if (seg.length === 5 && seg[3] === 'rules') {
+      if (seg[4] === 'apply' && method === 'POST') return handleRulesApply(req, res, id);
+      if (method === 'PUT') return handleRulePut(req, res, id, seg[4]);
     }
   }
 
@@ -1228,11 +1283,16 @@ server.on('clientError', (err, socket) => {
 
 seedLedgerEvents();
 
+// Inventory automation: pull due connectors every CONNECTOR_TICK_MS (60s).
+// unref'd inside startScheduler so the timer never keeps the process alive.
+connectors.startScheduler();
+
 server.listen(PORT, HOST, () => {
   console.log(`[settled] listening on http://${HOST}:${PORT}  mode=${paypal.mode()}`);
   if (!paypal.isLive()) {
     console.log('[settled] PayPal adapter in SIM mode (set PAYPAL_LIVE=1 + credentials for live)');
   }
+  console.log(`[settled] inventory scheduler every ${connectors.CONNECTOR_TICK_MS}ms`);
 });
 
 module.exports = { server };

@@ -84,6 +84,9 @@
 .mkt-v{min-width:0;color:var(--ink-2);line-height:1.5;white-space:normal;overflow-wrap:anywhere;display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px}
 .mkt-v .mode{font-size:8px;padding:2px 7px;letter-spacing:.08em}
 .mkt-v .mono{font-family:var(--mono);font-size:9.5px;color:var(--muted)}
+.mkt-window{display:inline-flex;align-items:center;gap:5px;font:600 9.5px var(--mono);letter-spacing:.03em;color:var(--emerald);white-space:nowrap}
+.mkt-window svg{width:11px;height:11px;flex:none;opacity:.85}
+.mkt-window.is-upcoming{color:var(--gold)}
 .mkt-card-foot{margin-top:auto;display:flex;align-items:stretch;gap:10px;padding-top:2px;min-width:0}
 .mkt-fine{display:none}
 .mkt-cta{flex:1;padding:9px 12px;font-size:11px;border-radius:9px;gap:6px}
@@ -242,7 +245,7 @@
         </div>
         <span class="badge emerald" id="mktSchemaBadge">settled-index/1.0</span>
       </div>
-      <p class="mkt-ix-sub">Crawl the manifest &rarr; paginate the feed &rarr; negotiate a contract. Boards are categories — <b>r/audio</b>, <b>r/lighting</b>, <b>r/gadgets</b> — and every item carries an <span class="mono">offer_id</span>, its <span class="mono">published_range</span> and a <span class="mono">negotiate_url</span>. Private floors are never emitted.</p>
+      <p class="mkt-ix-sub">Crawl the manifest &rarr; paginate the feed &rarr; negotiate a contract. Boards are categories — <b>r/audio</b>, <b>r/lighting</b>, <b>r/gadgets</b> — and every item carries an <span class="mono">offer_id</span>, its <span class="mono">published_range</span>, its public <span class="mono">negotiation_window</span> and a <span class="mono">negotiate_url</span>. Private floors are never emitted.</p>
       <div class="mkt-ix-rows">
         <div class="mkt-ix-row">
           <span class="mkt-ix-label">Manifest</span>
@@ -283,6 +286,7 @@
   <span class="k">"offer_id"</span>: <span class="s">"m1:p1"</span>,
   <span class="k">"merchant"</span>: { <span class="k">"name"</span>: <span class="s">"Northwind Audio"</span>, <span class="k">"tier"</span>: <span class="s">"A"</span>, <span class="k">"score"</span>: <span class="n">91</span> },
   <span class="k">"published_range"</span>: { <span class="k">"min"</span>: <span class="n">214</span>, <span class="k">"max"</span>: <span class="n">249</span> },
+  <span class="k">"negotiation_window"</span>: { <span class="k">"from"</span>: <span class="s">"2026-11-06T00:00:00Z"</span>, <span class="k">"to"</span>: <span class="s">"2026-11-30T23:59:59Z"</span> },
   <span class="k">"negotiate_url"</span>: <span class="s">"/negotiate.html?merchant=m1&amp;product=p1"</span>,
   <span class="k">"updated_at"</span>: <span class="s">"2026-11-05T14:00:00Z"</span>
 }</code></pre>
@@ -307,7 +311,7 @@
     </div>
   </noscript>
 
-  <p class="sr-only">Each board (r/audio, r/lighting, r/gadgets) groups cards by category. Each card shows merchant trust, list price, the merchant's published range, protection and terms, with a “Negotiate with agent” link to the negotiation page. The private floor is never shown.</p>
+  <p class="sr-only">Each board (r/audio, r/lighting, r/gadgets) groups cards by category. Each card shows merchant trust, list price, the merchant's published range, the negotiation window when one is set, protection and terms, with a “Negotiate with agent” link to the negotiation page. The private floor is never shown.</p>
 
   <footer class="footer mkt-foot">
     <span><b>bit-settled</b> · negotiation index · deterministic API · simulated payments unless PAYPAL_LIVE=1</span>

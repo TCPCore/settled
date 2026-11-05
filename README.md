@@ -66,7 +66,11 @@ curl -s http://127.0.0.1:4173/api/agent-manifest | python3 -m json.tool
 
 Feed items are keyed by a stable `offer_id` (`m1:p1`), ordered deterministically so cursor pagination cannot skip, and carry only `published_range` — never `sell_min`/`auto_accept`. `/market.html` shows the "For indexers" panel (manifest/feed/OpenAPI + copy); `/merchant.html` has the import panel.
 
-**60-second indexer + agent path:** `npm test` (78/78) → `node server.js` → `/api/index/manifest` → `/api/index/feed` → `POST /api/contracts` + `/ai-auto` → `POST /api/merchants/:id/orders` → `/negotiate.html?merchant=m1&product=p1` for the full hosted flow. No merchant URL is needed anywhere in the indexer path: the feed carries `negotiate_url`.
+### Inventory pull, category rules, negotiation windows
+
+Beyond one-shot import, a merchant can save a **connector** (`GET`/`PUT /api/merchants/:id/connector`) and let the plugin **pull** their catalog: `POST /api/merchants/:id/catalog/sync` pulls now, or a 60 s best-effort scheduler (`CONNECTOR_TICK_MS`) syncs enabled `feed` connectors when due. Pulls upsert by `sku` and record `last_sync_at`/`last_status`/`last_counts`; failures are recorded on the connector and never crash the server. **Category rules** (`GET`/`PUT /api/merchants/:id/rules/:category`) set `sell_min_pct` / `publish_min_pct` / `auto_accept_pct` / `max_discount_pct` per category — new items, imports and syncs inherit them, and `POST /api/merchants/:id/rules/apply` re-derives existing items from their current prices. Negotiation is available only inside the **effective window**: a product-level `window` overrides the category window, `/api/index`, `/api/index/feed` and `/api/categories` hide closed items, a contract on a closed item returns **`409 NEGOTIATION_WINDOW_CLOSED`**, and the feed exposes the public `negotiation_window` only. Merchant UI: `/merchant.html` → **Inventory source**, **Category rules**, per-product window override; market: "Open until …" badges. Full guide: **[INVENTORY.md](INVENTORY.md)**; contract: [INVENTORY-AUTOMATION-SPEC.md](INVENTORY-AUTOMATION-SPEC.md); QA: [test/README.md](test/README.md) T81–T84.
+
+**60-second indexer + agent path:** `npm test` (82/82) → `node server.js` → `/api/index/manifest` → `/api/index/feed` → `POST /api/contracts` + `/ai-auto` → `POST /api/merchants/:id/orders` → `/negotiate.html?merchant=m1&product=p1` for the full hosted flow. No merchant URL is needed anywhere in the indexer path: the feed carries `negotiate_url`.
 
 ## Screenshots
 
@@ -80,7 +84,7 @@ Feed items are keyed by a stable `offer_id` (`m1:p1`), ordered deterministically
 
 ## The write-up (novelty, money, niche, USP, pitch, demo reality)
 
-**[WRITEUP.md](WRITEUP.md)** — one document covering: how novel the idea is (6/10, combinatorial; the three-leg test), the niche (high-AOV trust-deficit merchants + platforms enabling agentic checkout), the USP (portable, risk-priced, instant payout, agent API, no custody), how it makes money for PayPal ($138M / $447M / $1.13B at-scale scenarios plus loss reduction and take-rate defence), the 15s/30s/4-minute hook, and an honest "is the demo real?" audit (real logic + 78/78 tests; simulated money by default; live PayPal sandbox path one env var away).
+**[WRITEUP.md](WRITEUP.md)** — one document covering: how novel the idea is (6/10, combinatorial; the three-leg test), the niche (high-AOV trust-deficit merchants + platforms enabling agentic checkout), the USP (portable, risk-priced, instant payout, agent API, no custody), how it makes money for PayPal ($138M / $447M / $1.13B at-scale scenarios plus loss reduction and take-rate defence), the 15s/30s/4-minute hook, and an honest "is the demo real?" audit (real logic + 82/82 tests; simulated money by default; live PayPal sandbox path one env var away).
 
 ## Before the hackathon: the Strategyzer-grounded playbook
 
@@ -151,7 +155,7 @@ Deploy steps: **[DEPLOY.md](DEPLOY.md)** (Render / Docker / tunnel / MCP). Secur
 
 ## Hackathon submission (PayPal AI Hackathon 2026)
 
-The repo is the submission: working prototype + MIT license + Devpost text + a <3:00 video. The **build spec** (frozen AI negotiation + PayPal sandbox interfaces) and the **submission plan** (rules, deadline **Nov 12, 2026, 2:00 PM PT**, checklist) are linked in the table below.
+The repo is the submission: working prototype + Apache-2.0 license + Devpost text + a <3:00 video. The **build spec** (frozen AI negotiation + PayPal sandbox interfaces) and the **submission plan** (rules, deadline **Nov 12, 2026, 2:00 PM PT**, checklist) are linked in the table below.
 
 | Artifact | Where |
 |---|---|
@@ -162,14 +166,14 @@ The repo is the submission: working prototype + MIT license + Devpost text + a <
 | Story, novelty audit, PayPal money case | **[WRITEUP.md](WRITEUP.md)** |
 | One-page judge brief | **[JUDGE-BRIEF.md](JUDGE-BRIEF.md)** |
 | Pitch, Q&A, rubric map, rehearsal runbook | **[HACKATHON-PROOF.md](HACKATHON-PROOF.md)** |
-| License | **[LICENSE](LICENSE)** (MIT) |
+| License | **[LICENSE](LICENSE)** (Apache-2.0) |
 
 ### Run and verify
 
 ```bash
 cd settled
 node server.js        # → http://127.0.0.1:4173/demo.html
-npm test              # full e2e suite — 78/78 assertions (trust, passport, contract, AI, PayPal SIM)
+npm test              # full e2e suite — 82/82 assertions (trust, passport, contract, AI, PayPal SIM)
 ```
 
 ### Configure AI + PayPal (both optional)
@@ -205,7 +209,7 @@ node server.js
 
 ### 60-second judge path
 
-1. `npm test` — 78/78 assertions green, no network needed.
+1. `npm test` — 82/82 assertions green, no network needed.
 2. `node server.js` → open **`/demo.html`** → **Reset** → **Run full demo** → scorecard ends **ALL FIVE AXES 8+**.
 3. Step 3: leave **AI agents** checked → watch the negotiation transcript with `AI`/`FALLBACK` badges and the signed contract hash.
 4. Step 4: order at the agreed amount. In SIM it shows a payment id; with sandbox credentials the manual step renders real **PayPal Buttons** in a "Live PayPal sandbox" block (approve → real capture id).
@@ -283,7 +287,7 @@ The claim flow is the point: a buyer taps **Report a problem**, checks the evide
 
 ## Build notes & test status
 
-- **E2E: 78/78 pass.** `npm test` (spawns its own server on 4400, resets seed at start and end).
+- **E2E: 82/82 pass.** `npm test` (spawns its own server on 4400, resets seed at start and end).
 - **Risk constants were re-fit** from the spec's literal weights so the seed table reproduces exactly (91/76/54); the five component formulas and weighted-sum shape are unchanged. Documented in `lib/risk.js`.
 - `POST /api/merchants/:id/orders` returns **200** (the spec enumerates only 400/404/409; QA accepts 200/201).
 - `fulfill` sets `status: "delivered"`; a second fulfill returns **409**.
