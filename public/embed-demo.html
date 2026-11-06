@@ -123,15 +123,16 @@ body[data-page="embed"]{
   .install-actions .tiny{max-width:none}
 }
 </style>
+<link rel="stylesheet" href="paypal-theme.css">
 </head>
-<body data-page="embed">
+<body class="paypal-theme" data-page="embed">
 <div class="bg" aria-hidden="true"></div>
 
 <header class="embed-nav">
   <div class="embed-nav-in">
     <a class="brand" href="index.html" aria-label="Settled home">
       <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.4 20.4 7v10L12 21.6 3.6 17V7L12 2.4Z" fill="#2BD9A0" fill-opacity=".16" stroke="#2BD9A0" stroke-width="1.3"/><path d="m8.3 12.2 2.4 2.4 5-5.2" stroke="#2BD9A0" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.4 20.4 7v10L12 21.6 3.6 17V7L12 2.4Z" fill="#0070BA" fill-opacity=".16" stroke="#0070BA" stroke-width="1.3"/><path d="m8.3 12.2 2.4 2.4 5-5.2" stroke="#0070BA" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </span>
       <span class="brand-copy"><b>bit-settled</b><small>trust settlement</small></span>
     </a>
@@ -177,10 +178,10 @@ body[data-page="embed"]{
             <path d="M52 150V118a78 78 0 0 1 156 0v32" fill="none" stroke="#8FF8D9" stroke-opacity=".28" stroke-width="3" stroke-linecap="round"/>
             <rect x="30" y="136" width="48" height="82" rx="20" fill="url(#hpCup)" stroke="#335A83" stroke-width="1.5"/>
             <rect x="182" y="136" width="48" height="82" rx="20" fill="url(#hpCup)" stroke="#335A83" stroke-width="1.5"/>
-            <rect x="41" y="149" width="26" height="56" rx="13" fill="none" stroke="#2BD9A0" stroke-opacity=".55" stroke-width="2"/>
-            <rect x="193" y="149" width="26" height="56" rx="13" fill="none" stroke="#2BD9A0" stroke-opacity=".55" stroke-width="2"/>
-            <circle cx="54" cy="177" r="3" fill="#2BD9A0"/>
-            <circle cx="206" cy="177" r="3" fill="#2BD9A0"/>
+            <rect x="41" y="149" width="26" height="56" rx="13" fill="none" stroke="#0070BA" stroke-opacity=".55" stroke-width="2"/>
+            <rect x="193" y="149" width="26" height="56" rx="13" fill="none" stroke="#0070BA" stroke-opacity=".55" stroke-width="2"/>
+            <circle cx="54" cy="177" r="3" fill="#0070BA"/>
+            <circle cx="206" cy="177" r="3" fill="#0070BA"/>
             <path d="M96 118c10-14 58-14 68 0" fill="none" stroke="#F5C451" stroke-opacity=".55" stroke-width="2" stroke-linecap="round"/>
           </svg>
         </div>
@@ -201,7 +202,7 @@ body[data-page="embed"]{
             </button>
             <div class="paypal-note" id="paypalNote" hidden></div>
             <!-- One line is all a storefront needs. data-inline adds the button beside the PayPal checkout. -->
-            <script src="/settled-widget.js" data-merchant="m1" data-product="p1" data-label="Negotiate with AI" data-inline="true" data-position="bottom-right" data-theme="dark"></script>
+            <script src="/settled-widget.js" data-merchant="m1" data-product="p1" data-label="Negotiate with AI" data-inline="true" data-position="bottom-right" data-theme="light"></script>
             <div class="buy-trust"><span class="dot" aria-hidden="true"></span><span><b>Protected by Settled.</b> If the parcel never arrives, the buyer agent files a claim and the reserve refunds instantly.</span></div>
           </div>
         </div>
@@ -211,7 +212,7 @@ body[data-page="embed"]{
     <aside class="embed-side">
       <section class="embed-card install-card">
         <div class="embed-card-head"><div class="embed-card-title">Install in one line</div><span class="badge">script tag</span></div>
-        <pre class="install-code"><code id="installSnippet">&lt;script src="/settled-widget.js" data-merchant="m1" data-product="p1" data-label="Negotiate with AI"&gt;&lt;/script&gt;</code></pre>
+        <pre class="install-code"><code id="installSnippet">&lt;script src="/settled-widget.js" data-merchant="m1" data-product="p1" data-label="Negotiate with AI" data-theme="light"&gt;&lt;/script&gt;</code></pre>
         <div class="install-actions">
           <button class="btn btn-ghost btn-sm" id="copyInstall" type="button">Copy snippet</button>
           <span class="tiny muted">Add <span class="mono">data-inline="true"</span> for the inline button shown above; the floating button is always added.</span>
