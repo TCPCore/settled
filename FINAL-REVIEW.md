@@ -22,7 +22,7 @@
 | **Trust engine** | HMAC-SHA256 credential, SHA-256 hash-chained event log, risk tiers 35/90/150 bps, reserve accounting, instant claims |
 | **Tests** | `npm test` → **85/85**, including PayPal SIM create/capture/refund and AI fallback |
 | **Repo** | public Apache-2.0 repo: https://github.com/cptlight/bit-settled |
-| **Deployable demo** | `Dockerfile`, `render.yaml`, `DEPLOY.md`; `/integrate.html`; private SIM tunnel for testing (unlisted) |
+| **Deployable demo** | Live HF Space: https://tomscot-bit-settled.hf.space/start.html (SIM, no keys); `Dockerfile`, `render.yaml`, `DEPLOY-HF.md` |
 | **Narrative** | [WRITEUP.md](WRITEUP.md), [JUDGE-BRIEF.md](JUDGE-BRIEF.md), [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md), [HACKATHON-PROOF.md](HACKATHON-PROOF.md) |
 
 ---
@@ -191,7 +191,7 @@ With keys: `docker run --rm -p 8080:8080 --env-file .env settled-demo`.
 | **P0** | Video not recorded | 2:55 take per [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md); step 3 chat + live PayPal capture/refund; upload public YouTube | You |
 | **P0** | `VIDEO_URL_HERE` empty | Fill after upload; submit on Devpost | You |
 | **P1** | Merchant install is a hosted-checkout prototype, not a native cart plugin | `/integrate.html`, `/embed-demo.html`, OpenAPI, agent manifest and MCP stdio are built; native Shopify/Woo cart plugins remain roadmap | Build |
-| **P1** | Render service not created | Connect repo, keep SIM, test URL, keep unlisted | You |
+| **P1** | Persistent host | HF Space is live; keepalive workflow runs every 6h. Render remains an alternative | Done |
 | **P2** | No real merchant OAuth/Partner Referral | Document the production path; don't claim it in the demo | Docs |
 | **P2** | MCP stdio exists, hosted MCP auth/remote deployment does not | Document stdio usage now; add hosted MCP auth after the hackathon | Build |
 | **P2** | Insurance/underwriting partner | One term sheet target; demo pool caveat | BD |
