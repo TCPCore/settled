@@ -283,6 +283,15 @@
   .inv-grid{grid-template-columns:1fr}
   .inv-stats{grid-template-columns:1fr 1fr}
 }
+/* setup rail */
+.setup-rail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 16px}
+.setup-step{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;background:#fff;padding:10px 12px;min-width:0}
+.setup-step .setup-n{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#e8f3fb;color:#005ea6;font:800 10px var(--mono);flex:none}
+.setup-step.done .setup-n{background:#0070ba;color:#fff}
+.setup-step.active{border-color:#b9d9ef;background:#f2f8fd}
+.setup-step b{display:block;font-size:11px;color:#001435;line-height:1.25}
+.setup-step small{display:block;font-size:9px;color:#5b6b7c;margin-top:2px}
+@media(max-width:760px){.setup-rail{grid-template-columns:1fr}}
 </style>
 <link rel="stylesheet" href="paypal-theme.css">
 </head>
@@ -333,6 +342,12 @@
           Preview negotiation
         </a>
       </div>
+    </section>
+
+    <section class="setup-rail" aria-label="Setup progress">
+      <div class="setup-step done"><span class="setup-n">1</span><div><b>Connect inventory</b><small>Feed, CSV or demo catalog</small></div></div>
+      <div class="setup-step done"><span class="setup-n">2</span><div><b>Agent configures policy</b><small>Category rules and windows</small></div></div>
+      <div class="setup-step active"><span class="setup-n">3</span><div><b>Tune &amp; go live</b><small>Only the published range is public</small></div></div>
     </section>
 
     <div class="merchant-layout">

@@ -309,3 +309,35 @@ body.paypal-theme .integrate-table td { background: #fff !important; }
 html { color-scheme: light !important; }
 body.paypal-theme ::selection { background: #cce8fb !important; color: #001435 !important; }
 body.paypal-theme :focus-visible { outline-color: #0070ba !important; }
+
+/* ---- PayPal design philosophy: blue-first, human, accessible ---- */
+body.paypal-theme {
+  --sans: "Avenir Next", "Futura", "Century Gothic", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --shadow: 0 14px 34px -28px rgba(0, 20, 53, .26);
+}
+body.paypal-theme .bg {
+  background:
+    radial-gradient(52% 42% at 8% -10%, rgba(0, 112, 186, .12), transparent 62%),
+    radial-gradient(40% 34% at 96% 0%, rgba(0, 48, 135, .09), transparent 60%),
+    #f5f7fa !important;
+}
+body.paypal-theme .bg::after { opacity: .22 !important; }
+body.paypal-theme h1, body.paypal-theme .demo-title, body.paypal-theme .hub-hero h1,
+body.paypal-theme .page-title, body.paypal-theme .merchant-title {
+  letter-spacing: -.035em;
+}
+body.paypal-theme .brand-mark, body.paypal-theme .hub-card .hub-kicker,
+body.paypal-theme .eyebrow { color: #0070ba !important; }
+body.paypal-theme .badge.gold, body.paypal-theme .badge.amber {
+  background: #e8f3fb !important; border-color: #b9d9ef !important; color: #005ea6 !important;
+}
+body.paypal-theme .btn, body.paypal-theme .hub-card { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease; }
+body.paypal-theme .btn:active { transform: translateY(1px); }
+body.paypal-theme .hub-card:hover { box-shadow: 0 16px 34px -28px rgba(0, 20, 53, .28) !important; }
+body.paypal-theme .hub-actions .btn-primary { box-shadow: 0 8px 20px -12px rgba(0, 112, 186, .55); }
+@media (prefers-reduced-motion: reduce) {
+  body.paypal-theme *, body.paypal-theme *::before, body.paypal-theme *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important; scroll-behavior: auto !important;
+  }
+}
