@@ -42,6 +42,7 @@
     acc: null,
     claim: null,
     claimAi: null,
+    live: false,
     busy: false,
     callCount: 0
   };
@@ -123,6 +124,7 @@
     return S.api('/config').then(function (cfg) {
       state.config = cfg;
       var live = String(cfg && cfg.mode).toLowerCase();
+      state.live = (live === 'live' || live === 'paypal') && !!(cfg && cfg.paypal && cfg.paypal.configured);
       S.setEnv(live === 'live' || live === 'paypal' ? 'paypal' : 'sim');
     }).catch(function () { /* health/config is optional */ });
   }
@@ -560,7 +562,7 @@
       actions.hidden = false;
       var payBtn = $('payBtn');
       payBtn.disabled = false;
-      payBtn.textContent = 'Pay ' + money(c.agreed_price) + ' (SIM)';
+      payBtn.textContent = 'Pay ' + money(c.agreed_price) + (state.live ? ' · PayPal sandbox' : ' (SIM)');
       setText('startBadge', 'contract signed');
     } else {
       actions.hidden = true;
@@ -583,7 +585,7 @@
         buyer: { name: 'Maya Chen', email: 'maya@example.com' },
         contract_id: c.id,
         agent_id: AGENT_ID,
-        simulate: true
+        simulate: !state.live
       }
     }).then(function (res) {
       state.order = (res && res.order) || null;
@@ -595,7 +597,7 @@
       if ($('orderPanel') && $('orderPanel').scrollIntoView) {
         try { $('orderPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
       }
-      toast('Order placed at ' + money(state.order && state.order.amount) + ' — SIM payment.', 'ok');
+      toast(state.live ? 'PayPal sandbox order created — approve in PayPal, then capture.' : 'Order placed at ' + money(state.order && state.order.amount) + ' — SIM payment.', 'ok');
     }).catch(function (err) {
       toast(err && err.message ? err.message : 'order failed', 'err');
     }).then(function () {
@@ -619,10 +621,47 @@
       '<div class="facts">' + facts.map(function (f) {
         return '<div class="fact"><div class="fact-label">' + esc(f[0]) + '</div><div class="fact-value">' + f[1] + '</div></div>';
       }).join('') + '</div>' +
-      '<div class="note-inline">The order carries the Agent Commerce Contract hash, so the price and terms are provable after the fact. This is the SIM rail; with sandbox credentials the same call returns a live PayPal order and capture id.</div>';
+      '<div class="note-inline">' + (o.simulated
+        ? 'The order carries the Agent Commerce Contract hash. This is the deterministic SIM rail; the hosted live sandbox uses the real PayPal approval rail.'
+        : 'Live PayPal sandbox order. Approve it in PayPal, then capture to lock the real capture id before filing a claim.') + '</div>';
     setText('orderSub', 'Order ' + (o.id || '') + ' · ' + money(o.amount));
-    setText('orderBadge', o.status === 'paid' ? 'paid (SIM)' : String(o.status || '—'));
-    show('orderActions', true);
+    setText('orderBadge', o.status === 'paid' ? (o.simulated ? 'paid (SIM)' : 'paid · sandbox') : String(o.status || '—'));
+    var actions = $('orderActions');
+    if (actions) {
+      var approval = p.approval_url || o.approval_url;
+      if (!o.simulated && approval) {
+        actions.innerHTML = '<a class="btn btn-gold" href="' + esc(approval) + '" target="_blank" rel="noopener noreferrer">Open PayPal approval</a>' +
+          '<button class="btn btn-primary" id="captureLiveBtn" type="button">I approved — capture</button>';
+        var captureBtn = $('captureLiveBtn');
+        if (captureBtn) captureBtn.addEventListener('click', function () { captureLive(captureBtn); });
+      } else {
+        actions.innerHTML = '<button class="btn btn-danger" id="claimBtn" type="button">File claim — item never arrived</button>';
+        var cb = $('claimBtn');
+        if (cb) cb.addEventListener('click', fileClaim);
+      }
+      actions.hidden = false;
+    }
+  }
+
+  /* ---------- live PayPal capture ---------- */
+  function captureLive(btn) {
+    if (state.busy || !state.order) return;
+    state.busy = true;
+    setBusy(btn, true, 'Capturing…');
+    S.api('/paypal/capture', {
+      method: 'POST',
+      body: { order_id: state.order.id, paypal_order_id: (state.payment && state.payment.id) || undefined }
+    }).then(function (res) {
+      state.order = (res && res.order) || state.order;
+      state.payment = (res && res.capture) || state.payment;
+      renderOrder();
+      toast('PayPal sandbox payment captured.', 'ok');
+    }).catch(function (err) {
+      toast((err && err.message) || 'capture failed', 'err');
+    }).then(function () {
+      state.busy = false;
+      setBusy(btn, false);
+    });
   }
 
   /* ---------- claim ---------- */
