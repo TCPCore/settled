@@ -2437,6 +2437,188 @@ async function main() {
     eq((finalIdx.json.items || []).length, 5, 'final reset must restore 5 seed index items');
     return `merchant ${merchantHtml.text.length}B+${merchantJs.text.length}B; market ${marketHtml.text.length}B+${marketJs.text.length}B; window public; no private-range leak`;
   });
+
+  // =========================================================================
+  // v8 — agent-assisted setup: autoconfigure + agent-drafted catalog
+  // (AGENT-SETUP-SPEC.md)
+  // =========================================================================
+  await reset();
+
+  const categoryNames = (list) => (list || []).map((c) => String(c && typeof c === 'object' ? (c.name || c.id || '') : c));
+  const DEFAULT_RULE_PCTS = { sell_min_pct: 0.82, auto_accept_pct: 0.95, publish_min_pct: 0.86, max_discount_pct: 18 };
+
+  await test('T85', 'v8 agent autoconfigure: rules ensured + applied, categories/updated, idempotent, no AI', async () => {
+    // Non-default Audio policy + a product whose category has no rule yet.
+    const saved = await http('PUT', '/api/merchants/m1/rules/Audio', {
+      body: { sell_min_pct: 0.8, auto_accept_pct: 0.9, publish_min_pct: 0.85, max_discount_pct: 20 },
+    });
+    eq(saved.status, 200, 'PUT Audio rule status');
+    const extra = await post('/api/merchants/m1/catalog', { name: 'Autoconfigure Accessory', price: 100, category: 'Accessories', description: 'created before autoconfigure' });
+    eq(extra.status, 200, 'create Accessories product status');
+    const extraId = extra.json.product.id;
+    const beforeRules = (await get('/api/merchants/m1/rules')).json.rules;
+    assert(!ruleOf(beforeRules, 'Accessories'), `test premise failed: Accessories already has a rule: ${JSON.stringify(beforeRules)}`);
+
+    const r1 = await post('/api/merchants/m1/agent/autoconfigure', {});
+    eq(r1.status, 200, 'POST agent/autoconfigure status');
+    hasKeys(r1.json, ['merchant_id', 'categories', 'updated', 'skipped', 'rules', 'products', 'ai'], 'autoconfigure response');
+    eq(r1.json.merchant_id, 'm1', 'autoconfigure.merchant_id');
+    const cats = categoryNames(r1.json.categories).map((c) => c.toLowerCase());
+    for (const c of ['audio', 'accessories']) {
+      assert(cats.includes(c), `autoconfigure.categories must include "${c}"; got ${JSON.stringify(r1.json.categories)}`);
+    }
+    const accessRule = ruleOf(r1.json.rules, 'Accessories');
+    assert(accessRule, `autoconfigure must create a default rule for every product category (Accessories); rules: ${JSON.stringify(Object.keys(r1.json.rules || {}))}`);
+    near(accessRule.sell_min_pct, DEFAULT_RULE_PCTS.sell_min_pct, 'Accessories sell_min_pct');
+    near(accessRule.auto_accept_pct, DEFAULT_RULE_PCTS.auto_accept_pct, 'Accessories auto_accept_pct');
+    near(accessRule.publish_min_pct, DEFAULT_RULE_PCTS.publish_min_pct, 'Accessories publish_min_pct');
+    eq(num(accessRule.max_discount_pct), DEFAULT_RULE_PCTS.max_discount_pct, 'Accessories max_discount_pct');
+    const audioRule = ruleOf(r1.json.rules, 'Audio');
+    near(audioRule.sell_min_pct, 0.8, 'Audio rule preserved by autoconfigure');
+    eq(r1.json.ai && r1.json.ai.used, false, 'autoconfigure must not call the AI (ai.used:false)');
+    assert(num(r1.json.updated) >= 3, `autoconfigure.updated must count the applied products, got ${JSON.stringify(r1.json.updated)}`);
+    eq(num(r1.json.skipped), 0, `no product should skip, got ${JSON.stringify(r1.json.skipped)}`);
+    assert(Array.isArray(r1.json.products) && r1.json.products.length >= 3, `autoconfigure.products must return the catalog, got ${JSON.stringify(r1.json.products)}`);
+
+    // Rules were applied: Audio 80/90/85, Accessories 82/95/86.
+    const cat1 = await get('/api/merchants/m1/catalog');
+    const p1 = (cat1.json.products || []).find((p) => p.id === 'p1');
+    assert(p1 && p1.negotiation, 'p1 missing from catalog after autoconfigure');
+    near(p1.negotiation.sell_min, Math.round(p1.price * 0.8), 'p1.sell_min after autoconfigure', 1);
+    near(p1.negotiation.auto_accept, Math.round(p1.price * 0.9), 'p1.auto_accept after autoconfigure', 1);
+    near(p1.negotiation.publish_min, Math.round(p1.price * 0.85), 'p1.publish_min after autoconfigure', 1);
+    const acc = (cat1.json.products || []).find((p) => p.id === extraId);
+    assert(acc && acc.negotiation, 'Accessories product missing after autoconfigure');
+    near(acc.negotiation.sell_min, Math.round(acc.price * 0.82), 'Accessories item sell_min after autoconfigure', 1);
+    near(acc.negotiation.auto_accept, Math.round(acc.price * 0.95), 'Accessories item auto_accept after autoconfigure', 1);
+    eq(acc.negotiation.window == null, true, 'autoconfigure apply must clear item window overrides (inherit the rule window)');
+
+    // Idempotent: the second call changes neither rules nor ranges nor counters.
+    const r2 = await post('/api/merchants/m1/agent/autoconfigure', {});
+    eq(r2.status, 200, 'second autoconfigure status');
+    eq(num(r2.json.updated), num(r1.json.updated), 'second autoconfigure.updated must equal the first');
+    eq(num(r2.json.skipped), num(r1.json.skipped), 'second autoconfigure.skipped must equal the first');
+    eq(JSON.stringify(r2.json.rules), JSON.stringify(r1.json.rules), 'second autoconfigure must not change the rules');
+    const cat2 = await get('/api/merchants/m1/catalog');
+    const p1b = (cat2.json.products || []).find((p) => p.id === 'p1');
+    eq(JSON.stringify(p1b.negotiation), JSON.stringify(p1.negotiation), 'second autoconfigure must not change product ranges');
+    eq(r2.json.ai && r2.json.ai.used, false, 'idempotent call still reports ai.used:false');
+    await reset();
+    return `ensured ${cats.length} category rule(s), applied ${num(r1.json.updated)} product(s); second call identical (${num(r2.json.updated)} updated), ai.used:false`;
+  });
+
+  await test('T86', 'v8 agent catalog: deterministic 3-product fallback, rule inheritance, empty brief 400, count cap', async () => {
+    await reset();
+    const before = await get('/api/merchants/m2/catalog');
+    const beforeCount = (before.json.products || []).length;
+    eq(beforeCount, 2, 'm2 starts with 2 seed products');
+    const rules = (await get('/api/merchants/m2/rules')).json.rules;
+    const pctsFor = (category) => ruleOf(rules, category) || DEFAULT_RULE_PCTS;
+
+    const added = await post('/api/merchants/m2/agent/catalog', { brief: 'Warm designer lamps and dimmable bulbs for a reading corner' });
+    eq(added.status, 200, 'POST agent/catalog status');
+    hasKeys(added.json, ['created', 'products', 'ai'], 'agent catalog response');
+    const createdCount = num(added.json.created) !== null
+      ? num(added.json.created)
+      : (Array.isArray(added.json.created) ? added.json.created.length : null);
+    eq(createdCount, 3, `agent catalog fallback must create 3 products, got ${JSON.stringify(added.json.created)}`);
+    assert(Array.isArray(added.json.products) && added.json.products.length === 3, `agent catalog products: expected 3, got ${JSON.stringify((added.json.products || []).length)}`);
+    assert(added.json.ai && added.json.ai.used === false, `no AI key -> deterministic fallback with ai.used:false, got ${JSON.stringify(added.json.ai)}`);
+
+    const after = await get('/api/merchants/m2/catalog');
+    eq((after.json.products || []).length, beforeCount + 3, 'agent-created products must be added to the merchant catalog');
+    const idx = await get('/api/index?merchant=m2');
+    assertNoPrivate(idx.json, '/api/index after agent catalog');
+    for (const p of added.json.products) {
+      assert(isObj(p) && typeof p.id === 'string' && typeof p.name === 'string' && p.name.length > 0, `agent-created product shape: ${JSON.stringify(p)}`);
+      assert(num(p.price) > 0, `agent-created product ${p.id} must have a positive price`);
+      const rule = pctsFor(p.category);
+      near(p.negotiation.sell_min, Math.round(p.price * rule.sell_min_pct), `${p.name} sell_min inherits the ${p.category} rule`, 1);
+      near(p.negotiation.auto_accept, Math.round(p.price * rule.auto_accept_pct), `${p.name} auto_accept inherits the ${p.category} rule`, 1);
+      near(p.negotiation.publish_min, Math.round(p.price * rule.publish_min_pct), `${p.name} publish_min inherits the ${p.category} rule`, 1);
+      eq(num(p.negotiation.max_discount_pct), num(rule.max_discount_pct), `${p.name} max_discount inherits the ${p.category} rule`);
+      assert((idx.json.items || []).some((i) => i.product.id === p.id), `agent-created product ${p.id} must appear in /api/index`);
+    }
+
+    // Empty / missing brief is rejected; the catalog is unchanged.
+    assertErrorShape(await post('/api/merchants/m2/agent/catalog', { brief: '' }), 400, 'empty brief');
+    assertErrorShape(await post('/api/merchants/m2/agent/catalog', { brief: '   ' }), 400, 'whitespace-only brief');
+    assertErrorShape(await post('/api/merchants/m2/agent/catalog', {}), 400, 'missing brief');
+
+    // An explicit count is honoured.
+    const two = await post('/api/merchants/m2/agent/catalog', { brief: 'Two cheap clip lights', count: 2 });
+    eq(two.status, 200, 'count=2 status');
+    eq(num(two.json.created), 2, 'count=2 must create 2 products');
+
+    // Count cap: above 8 is either clamped (<=8 created) or rejected 400.
+    const many = await post('/api/merchants/m2/agent/catalog', { brief: 'Bulk lights', count: 99 });
+    if (many.status === 200) {
+      assert(num(many.json.created) <= 8, `count cap is 8, got created=${JSON.stringify(many.json.created)}`);
+      assert((many.json.products || []).length <= 8, `count cap is 8, got ${(many.json.products || []).length} products`);
+    } else {
+      assertErrorShape(many, 400, 'count above the cap');
+    }
+    await reset();
+    return `fallback created 3 with ai.used:false, catalog ${beforeCount}->${beforeCount + 3}, count=2 honoured, cap enforced, empty brief 400, no index leak`;
+  });
+
+  await test('T87', 'v8 merchant Agent setup UI (Auto-configure, Add with agent), no manual Add product; demo strip', async () => {
+    const merchantHtml = await get('/merchant.html');
+    eq(merchantHtml.status, 200, 'merchant.html status');
+    const merchantJs = await get('/merchant.js');
+    eq(merchantJs.status, 200, 'merchant.js status');
+    const merchantSrc = `${merchantHtml.text}\n${merchantJs.text}`;
+    const markers = [
+      [/agent setup/i, 'Agent setup panel'],
+      [/auto-configure/i, 'Auto-configure catalog action'],
+      [/add with agent/i, 'Add with agent action'],
+      [/describe what you sell/i, 'Describe what you sell brief field'],
+      [/\/agent\/autoconfigure/, 'autoconfigure endpoint wiring'],
+      [/\/agent\/catalog/, 'agent catalog endpoint wiring'],
+      [/agent reads your catalog/i, 'agent-reads-catalog note'],
+      [/applies category rules/i, 'applies-category-rules note'],
+      [/northwind seller agent/i, 'merchant agent status line'],
+      [/policy configured/i, 'policy-configured status'],
+    ];
+    for (const [re, label] of markers) {
+      assert(re.test(merchantSrc), `merchant UI missing ${label} marker (merchant.html ${merchantHtml.text.length}B + merchant.js ${merchantJs.text.length}B)`);
+    }
+    // The manual one-by-one form is gone (the API stays; only the UI is removed).
+    assert(!/\badd product\b/i.test(merchantSrc), 'manual "Add product" section must be removed from /merchant.html (API stays)');
+    // Existing panels must survive the agent-setup change.
+    for (const [re, label] of [
+      [/inventory source/i, 'Inventory source panel'],
+      [/category rules/i, 'Category rules panel'],
+      [/import catalog/i, 'Import catalog panel'],
+      [/agent settings|seller agent/i, 'Agent settings panel'],
+    ]) {
+      assert(re.test(merchantSrc), `merchant UI lost the ${label} marker`);
+    }
+
+    const bad = [];
+    const { spawnSync } = require('node:child_process');
+    for (const rel of ['public/merchant.js']) {
+      const r = spawnSync(process.execPath, ['--check', path.join(ROOT, rel)], { encoding: 'utf8' });
+      if (r.status !== 0) bad.push(`${rel}: ${String(r.stderr || '').trim().split('\n')[0]}`);
+    }
+    assert(bad.length === 0, `node --check failed on agent-setup UI: ${bad.join(' | ')}`);
+
+    // Demo-console strip is part of the spec but has no owner in this batch:
+    // report presence/wiring, do not fail the build when absent.
+    const demoHtml = await get('/demo.html');
+    eq(demoHtml.status, 200, 'demo.html status');
+    const demoJs = await get('/demo.js');
+    eq(demoJs.status, 200, 'demo.js status');
+    const demoSrc = `${demoHtml.text}\n${demoJs.text}`;
+    const demoStrip = /merchant agent setup/i.test(demoSrc);
+    const demoWired = /\/agent\/autoconfigure/.test(demoSrc);
+    assert(!(demoWired && !demoStrip), 'demo strip calls autoconfigure but has no "Merchant agent setup" marker');
+
+    await reset();
+    eq(((await get('/api/index')).json.items || []).length, 5, 'final reset must restore 5 seed index items');
+    const stripDetail = demoStrip ? (demoWired ? 'present+wired' : 'present, wiring missing') : 'absent (no owner in batch)';
+    return `agent-setup markers ok; manual Add product removed; 5-step demo intact; demo strip ${stripDetail}`;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,8 @@
   var merchantId = S.qs('merchant') || 'm1';
   var catalogPath = '/merchants/' + encodeURIComponent(merchantId) + '/catalog';
   var agentPath = '/merchants/' + encodeURIComponent(merchantId) + '/agent';
+  var agentAutoconfigurePath = '/merchants/' + encodeURIComponent(merchantId) + '/agent/autoconfigure';
+  var agentCatalogPath = '/merchants/' + encodeURIComponent(merchantId) + '/agent/catalog';
   var importPath = '/merchants/' + encodeURIComponent(merchantId) + '/catalog/import';
   var connectorPath = '/merchants/' + encodeURIComponent(merchantId) + '/connector';
   var syncPath = '/merchants/' + encodeURIComponent(merchantId) + '/catalog/sync';
@@ -113,13 +115,18 @@
     importResultFoot: document.getElementById('importResultFoot'),
     adapterList: document.getElementById('adapterList'),
     adapterCount: document.getElementById('adapterCount'),
-    addForm: document.getElementById('addForm'),
-    addName: document.getElementById('addName'),
-    addPrice: document.getElementById('addPrice'),
-    addCategory: document.getElementById('addCategory'),
-    addDescription: document.getElementById('addDescription'),
-    addSubmit: document.getElementById('addSubmit'),
-    addError: document.getElementById('addError'),
+    agentSetupPanel: document.getElementById('agentSetupPanel'),
+    agentSetupStatus: document.getElementById('agentSetupStatus'),
+    agentSetupBadge: document.getElementById('agentSetupBadge'),
+    agentSetupRefreshBtn: document.getElementById('agentSetupRefreshBtn'),
+    autoconfigureBtn: document.getElementById('autoconfigureBtn'),
+    agentBrief: document.getElementById('agentBrief'),
+    agentBriefChips: document.getElementById('agentBriefChips'),
+    agentAddBtn: document.getElementById('agentAddBtn'),
+    agentSetupError: document.getElementById('agentSetupError'),
+    agentSetupResult: document.getElementById('agentSetupResult'),
+    agentSetupFoot: document.getElementById('agentSetupFoot'),
+    agentSetupMerchantId: document.getElementById('agentSetupMerchantId'),
     connectorForm: document.getElementById('connectorForm'),
     connectorBadge: document.getElementById('connectorBadge'),
     connectorAdapter: document.getElementById('connectorAdapter'),
@@ -352,6 +359,7 @@
       el.agentCardBadge.textContent = paused ? 'paused' : 'active';
       el.agentCardBadge.className = 'badge ' + (paused ? 'gold' : 'emerald');
     }
+    renderAgentSetup();
   }
 
   function renderAgentForm() {
@@ -888,57 +896,135 @@
     setTimeout(function () { row.classList.remove('is-new'); }, 2400);
   }
 
-  /* ---------------------------------------------------- add product -- */
-  async function addProduct(event) {
-    event.preventDefault();
-    if (state.loading) return;
-    var name = (el.addName.value || '').trim();
-    var price = num(el.addPrice.value);
-    var category = (el.addCategory.value || '').trim();
-    var description = (el.addDescription.value || '').trim();
-    var errors = [];
-    if (!name) errors.push('Product name is required.');
-    if (price === null || price <= 0) errors.push('Enter a price greater than 0.');
-    if (!category) errors.push('Category is required.');
-    if (errors.length) {
-      el.addError.textContent = errors[0];
-      S.toast(errors[0], 'err');
+  /* ---------------------------------------------------- agent setup -- */
+  function agentProductCategoryCount() {
+    if (state.rulesLoaded && state.rules && Array.isArray(state.rules.categories)) return state.rules.categories.length;
+    var seen = {};
+    var count = 0;
+    state.products.forEach(function (p) {
+      var name = p && p.category ? String(p.category) : 'Uncategorised';
+      if (!seen[name]) {
+        seen[name] = true;
+        count += 1;
+      }
+    });
+    return count;
+  }
+
+  function agentPolicyConfigured() {
+    return !!(state.rulesLoaded && state.rules && state.rules.categories && state.rules.categories.length > 0);
+  }
+
+  function renderAgentSetup() {
+    if (!el.agentSetupStatus) return;
+    var agent = state.agent || normalizeAgent(null);
+    var products = state.products.length;
+    var categories = agentProductCategoryCount();
+    var configured = agentPolicyConfigured();
+    el.agentSetupStatus.textContent = agent.name + ' · ' + products + ' product' + (products === 1 ? '' : 's') +
+      ' · ' + categories + ' categor' + (categories === 1 ? 'y' : 'ies') + ' · ' + (configured ? 'policy configured' : 'policy pending');
+    el.agentSetupBadge.textContent = configured ? 'ready' : 'setup';
+    el.agentSetupBadge.className = 'badge ' + (configured ? 'emerald' : 'gold');
+    el.agentSetupMerchantId.textContent = (state.merchant && state.merchant.id) || merchantId;
+    el.agentSetupFoot.textContent = configured
+      ? 'Auto-configure is deterministic and offline; Add with agent uses the AI drafting helper with a deterministic fallback.'
+      : 'Run Auto-configure to derive category rules for every product category.';
+  }
+
+  function showAgentResult(kind, res) {
+    if (!el.agentSetupResult) return;
+    res = res || {};
+    var ai = res.ai && typeof res.ai === 'object' ? res.ai : {};
+    var used = ai.used === true;
+    var warn = false;
+    var head;
+    var sub;
+    var list = '';
+    if (kind === 'autoconfigure') {
+      var categories = Array.isArray(res.categories) ? res.categories : [];
+      var updated = Number(res.updated) || 0;
+      var skipped = Number(res.skipped) || 0;
+      head = 'Agent configured ' + updated + ' product' + (updated === 1 ? '' : 's') + ' across ' + categories.length + ' categor' + (categories.length === 1 ? 'y' : 'ies');
+      sub = 'Updated ' + updated + ' · skipped ' + skipped + ' · ' + categories.length + ' rule' + (categories.length === 1 ? '' : 's') +
+        ' applied · ' + (used ? 'AI-assisted' : 'deterministic, no model call');
+      if (categories.length) {
+        list = '<ul class="agent-created">' + categories.slice(0, 8).map(function (c) {
+          return '<li><span class="ac-name">' + S.esc(c) + '</span><span class="ac-meta">category rule</span></li>';
+        }).join('') + '</ul>';
+      }
+      warn = skipped > 0;
+    } else {
+      var products = Array.isArray(res.products) ? res.products : [];
+      var created = res.created !== undefined ? Number(res.created) || 0 : products.length;
+      head = 'Agent drafted ' + created + ' item' + (created === 1 ? '' : 's');
+      sub = 'Created ' + created + ' · ' + (used ? 'AI-assisted' : 'deterministic fallback') +
+        ' · category rules inherited' + (ai.error ? ' · ' + ai.error : '');
+      if (products.length) {
+        list = '<ul class="agent-created">' + products.slice(0, 8).map(function (p) {
+          return '<li><span class="ac-name">' + S.esc(p.name || p.id || 'item') + '</span>' +
+            '<span class="ac-meta">' + S.esc(p.category || '—') + '</span>' +
+            '<span class="ac-price">' + S.esc(S.money0(p.price)) + '</span></li>';
+        }).join('') + '</ul>';
+      }
+      warn = !!ai.error;
+    }
+    el.agentSetupResult.hidden = false;
+    el.agentSetupResult.className = 'agent-setup-result' + (warn ? ' is-warn' : '');
+    el.agentSetupResult.innerHTML = '<div class="agent-result-head"><span>' + S.esc(head) + '</span>' +
+      '<span class="badge ' + (warn ? 'gold' : 'emerald') + '">' + S.esc(used ? 'ai' : 'deterministic') + '</span></div>' +
+      '<div class="agent-result-sub">' + S.esc(sub) + '</div>' + list;
+  }
+
+  async function autoConfigureCatalog() {
+    if (el.autoconfigureBtn.disabled) return;
+    el.agentSetupError.textContent = '';
+    setBusy(el.autoconfigureBtn, true, 'Configuring…');
+    try {
+      var res = await S.api(agentAutoconfigurePath, { method: 'POST', body: {} });
+      showAgentResult('autoconfigure', res);
+      await Promise.all([refreshCatalog(), loadRules()]);
+      S.toast('Agent configured the catalog.', 'ok');
+    } catch (err) {
+      el.agentSetupError.textContent = (err && err.message) || 'Could not auto-configure the catalog.';
+      S.toast((err && err.message) || 'Could not auto-configure the catalog.', 'err');
+    } finally {
+      setBusy(el.autoconfigureBtn, false);
+    }
+  }
+
+  async function addWithAgent() {
+    if (el.agentAddBtn.disabled) return;
+    var brief = (el.agentBrief.value || '').trim();
+    if (!brief) {
+      el.agentSetupError.textContent = 'Describe what you sell first — or pick an example below.';
+      S.toast('Describe what you sell first.', 'err');
       return;
     }
-    el.addError.textContent = '';
-    el.addSubmit.disabled = true;
-    el.addSubmit.classList.add('is-busy');
+    el.agentSetupError.textContent = '';
+    setBusy(el.agentAddBtn, true, 'Drafting…');
     try {
-      var res = await S.api(catalogPath, {
-        method: 'POST',
-        body: {
-          name: name,
-          price: price,
-          category: category,
-          description: description
-        }
-      });
-      var product = res && res.product;
-      var catalog = res && res.catalog;
-      applyCatalog(catalog && catalog.products ? catalog : { products: state.products.concat(product ? [product] : []) }, product ? product.id : null, false);
-      el.addName.value = '';
-      el.addPrice.value = '';
-      el.addCategory.value = '';
-      el.addDescription.value = '';
-      el.addError.textContent = '';
-      if (product) {
-        highlightProduct(product.id);
-        S.toast('Product added · ' + product.name, 'ok');
-      } else {
-        await refreshCatalog();
-        S.toast('Product added.', 'ok');
-      }
+      var res = await S.api(agentCatalogPath, { method: 'POST', body: { brief: brief, count: 3 } });
+      showAgentResult('catalog', res);
+      var created = res && Array.isArray(res.products) ? res.products : [];
+      await refreshCatalog(created.length && created[0].id ? created[0].id : null);
+      if (state.rulesLoaded) await loadRules();
+      var count = res && res.created !== undefined ? Number(res.created) || 0 : created.length;
+      S.toast('Agent drafted ' + count + ' item' + (count === 1 ? '' : 's') + '.', res && res.ai && res.ai.error ? 'warn' : 'ok');
     } catch (err) {
-      el.addError.textContent = (err && err.message) || 'Could not add product.';
-      S.toast((err && err.message) || 'Could not add product.', 'err');
+      el.agentSetupError.textContent = (err && err.message) || 'Could not draft products.';
+      S.toast((err && err.message) || 'Could not draft products.', 'err');
     } finally {
-      el.addSubmit.disabled = false;
-      el.addSubmit.classList.remove('is-busy');
+      setBusy(el.agentAddBtn, false);
+    }
+  }
+
+  async function refreshAgentSetup() {
+    setBusy(el.agentSetupRefreshBtn, true, 'Refreshing…');
+    try {
+      await Promise.all([refreshCatalog(), loadRules()]);
+      renderAgentSetup();
+    } finally {
+      setBusy(el.agentSetupRefreshBtn, false);
     }
   }
 
@@ -1270,6 +1356,7 @@
     el.rulesError.textContent = '';
     el.rulesFoot.textContent = 'GET/PUT ' + rulesPath + ' is not deployed yet.';
     el.rulesMerchantId.textContent = merchantId;
+    renderAgentSetup();
   }
 
   function percentCell(field, value, min, max) {
@@ -1299,14 +1386,16 @@
     el.rulesBadge.className = 'badge ' + (cats.length ? 'blue' : 'gold');
     el.rulesMerchantId.textContent = merchantId;
     if (!cats.length) {
-      el.rulesBody.innerHTML = '<tr><td colspan="8" class="rules-empty"><strong>No categories yet</strong>Add a product or save a category rule to see it here.</td></tr>';
-      el.rulesFoot.textContent = 'No category rules returned. Add products first, then set a policy per category.';
+      el.rulesBody.innerHTML = '<tr><td colspan="8" class="rules-empty"><strong>No categories yet</strong>Save a category rule or add catalog items to see categories here.</td></tr>';
+      el.rulesFoot.textContent = 'No category rules returned. Run Auto-configure in Agent setup, or set a category rule manually.';
       updateAllPreviews();
+      renderAgentSetup();
       return;
     }
     el.rulesBody.innerHTML = cats.map(ruleRow).join('');
     el.rulesFoot.textContent = 'Percentages are off list price. Saves apply to new and imported items; use Apply to re-derive existing items.';
     updateAllPreviews();
+    renderAgentSetup();
   }
 
   function ruleInput(tr, field) {
@@ -1455,7 +1544,18 @@
   /* --------------------------------------------------------- events -- */
   function wire() {
     el.refresh.addEventListener('click', function () { refreshCatalog(null); });
-    el.addForm.addEventListener('submit', addProduct);
+    if (el.autoconfigureBtn) el.autoconfigureBtn.addEventListener('click', autoConfigureCatalog);
+    if (el.agentAddBtn) el.agentAddBtn.addEventListener('click', addWithAgent);
+    if (el.agentSetupRefreshBtn) el.agentSetupRefreshBtn.addEventListener('click', refreshAgentSetup);
+    if (el.agentBriefChips) {
+      el.agentBriefChips.addEventListener('click', function (e) {
+        var chip = e.target && e.target.closest ? e.target.closest('[data-brief]') : null;
+        if (!chip) return;
+        el.agentBrief.value = chip.getAttribute('data-brief') || '';
+        el.agentBrief.focus();
+        el.agentSetupError.textContent = '';
+      });
+    }
     if (el.agentForm) el.agentForm.addEventListener('submit', saveAgent);
     [el.agentName, el.agentTone, el.agentEnabled].forEach(function (node) {
       if (!node) return;

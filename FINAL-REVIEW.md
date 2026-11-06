@@ -20,7 +20,7 @@
 | **PayPal live sandbox** | order `1TD07351F78687411` → capture `05T456380E807962V` (`REFUNDED`) → refund `2KN47117H3971321W` (`COMPLETED`, $249); verified via PayPal API — [LIVE-TEST.md](LIVE-TEST.md) |
 | **AI** | Ollama Cloud `gpt-oss:20b`; one-call negotiation plan; claim explainer; policy clamps prices; fallback without keys |
 | **Trust engine** | HMAC-SHA256 credential, SHA-256 hash-chained event log, risk tiers 35/90/150 bps, reserve accounting, instant claims |
-| **Tests** | `npm test` → **82/82**, including PayPal SIM create/capture/refund and AI fallback |
+| **Tests** | `npm test` → **85/85**, including PayPal SIM create/capture/refund and AI fallback |
 | **Repo** | public Apache-2.0 repo: https://github.com/cptlight/bit-settled |
 | **Deployable demo** | `Dockerfile`, `render.yaml`, `DEPLOY.md`; `/integrate.html`; private SIM tunnel for testing (unlisted) |
 | **Narrative** | [WRITEUP.md](WRITEUP.md), [JUDGE-BRIEF.md](JUDGE-BRIEF.md), [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md), [HACKATHON-PROOF.md](HACKATHON-PROOF.md) |
@@ -94,7 +94,7 @@ Typical rubric: **technical implementation, design, potential impact, innovation
 |---|---|---|---|
 | **Problem / impact** | Real, quantified, urgent | 51% legitimacy abandonment; $1.34B protection provision/$1.49B losses; agent trust gap | Keep numbers in the first 20s |
 | **Innovation** | Not a badge/wrapper; new category | Three-leg loop: buyer-initiated instant claim + portable credential + fee moves with it; prior-art audit | Say "6/10 combinatorial" honestly; show the loop |
-| **Technical execution** | Working, not mock; code quality; error handling | 82/82 tests; live sandbox IDs; hash chain; fallback; Docker/Render | Record the live take; show real IDs |
+| **Technical execution** | Working, not mock; code quality; error handling | 85/85 tests; live sandbox IDs; hash chain; fallback; Docker/Render | Record the live take; show real IDs |
 | **PayPal use** | Meaningful, not decorative | Orders v2 create/capture, Payments v2 refund, webhooks/Agent Ready mapping | Public demo is SIM; the video must show live sandbox |
 | **AI use** | Core, not a chatbot veneer | Model writes offer/counter/accept + claim rationale; server clamps prices; visible agent-to-agent chat | Keep `AI` badge visible; explain policy guardrails |
 | **Business model** | Who pays, unit economics, path | Merchant bps on protected GMV; platform license; agent API; pilot plan | One slide/one sentence; don't overclaim forecasts |
@@ -174,7 +174,7 @@ With keys: `docker run --rm -p 8080:8080 --env-file .env settled-demo`.
 - Step 3: 3 agent bubbles, policy strip, signed hash.
 - Step 4: SIM payment id; step 5: refund + AI claim review.
 - `/` dashboard and `/agent.html` load.
-- `npm test` 82/82.
+- `npm test` 85/85.
 - Optional: their own sandbox keys → live capture/refund.
 
 ### Privacy rules
@@ -207,7 +207,7 @@ With keys: `docker run --rm -p 8080:8080 --env-file .env settled-demo`.
 - [ ] Live instance tested: real sandbox capture/refund; AI `gpt-oss:20b`.
 - [ ] Video ≤3:00 recorded; shows step 3 chat, PayPal capture, claim/refund; public YouTube.
 - [ ] Devpost text + repo + video links; `VIDEO_URL_HERE` filled.
-- [ ] `npm test` 82/82; clean seed before recording.
+- [ ] `npm test` 85/85; clean seed before recording.
 - [ ] Honest boundary stated: SIM public; live sandbox in video; demo pool not production capital.
 - [ ] Submit before **Nov 12, 2026, 2:00 PM PT**.
 

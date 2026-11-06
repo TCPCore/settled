@@ -197,7 +197,71 @@ A window is open when `now ≥ from` **and** `now ≤ to`; a `null`/missing boun
 
 ---
 
-## 4. Curl quickstart
+## 4. Agent-assisted setup — no one-by-one product entry
+
+The merchant's own agent can read the catalog, derive the policy and add products from a brief. Manual one-by-one entry is an **advanced fallback only** (the `POST /catalog` API stays; the UI form is gone).
+
+### `POST /api/merchants/:id/agent/autoconfigure`
+
+Ensures a `category_rules` entry exists for **every product category** (default `82 / 95 / 86 / 18`, always-open window) and then applies the rules to all products — the same re-derivation as `POST /rules/apply`. **No network, idempotent** (a second call adds nothing and leaves the ranges identical), so it is safe to hit after every import/sync or when a new category appears.
+
+```json
+{
+  "merchant_id": "m1",
+  "categories": ["Accessories", "Audio"],
+  "updated": 3,
+  "skipped": 0,
+  "rules": { "Audio": { "…": "…" }, "Accessories": { "…": "…" } },
+  "products": [ "…merchant catalog view…" ],
+  "ai": { "used": false, "provider": "none", "model": null },
+  "configured": 1
+}
+```
+
+`updated` counts **products applied**, `configured` counts rules created by that call (0 on the re-run). `ai.used` is always `false`: this is deterministic policy work, not a model call.
+
+### `POST /api/merchants/:id/agent/catalog`
+
+Body `{ "brief": "what the merchant sells", "count": 3 }` — `count` defaults to 3, is clamped to **1–8**, and the brief is required (trimmed, max 1 000 chars sent to the model).
+
+- **One model call** (`ai.draftCatalog`) asks for `{products:[{name,price,category,description}]}`. The prompt carries only **public** merchant context (`id`, `name`, `domain`, `category`), the brief, the count and the merchant's category names — never reserve/floor/auto-accept data.
+- **Deterministic fallback:** with no AI key (or an AI error) it drafts 3 sensible category-appropriate products with `ai.used:false`, `ai.error:'ai_disabled'` (or the error message). The demo works identically without a key.
+- The server **validates and creates each draft** through `catalog.createProduct`, so every product **inherits its category rule** and is immediately in the merchant catalog and the public index (when its window is open).
+- Invalid items are skipped and reported in `errors[]`; the response is `{merchant_id, brief, requested, created, products, ai:{used,provider,model,error?}, errors?}`.
+
+Failure responses: empty/whitespace/missing `brief` → `400 INVALID_BRIEF`; non-numeric `count` → `400 INVALID_COUNT`.
+
+### UI path
+
+- **Merchant console** — `/merchant.html`, **Agent setup** panel above the catalog:
+  - status line (“Northwind Seller Agent · N products · N categories · policy configured”);
+  - **Auto-configure catalog** → `POST /agent/autoconfigure`, showing updated/skipped/rules;
+  - **Describe what you sell** textarea + example chips, **Add with agent** → `POST /agent/catalog` `{brief, count:3}`, showing the created products and refreshing the catalog;
+  - note: the agent reads the catalog and applies category rules, and any item can still be tuned below.
+- The manual **Add product** form is removed from the main page; the `POST /api/merchants/:id/catalog` endpoint remains for advanced/scripted use.
+- The demo console (`/demo.html`) has a compact **Merchant agent setup** strip (Auto-configure + link to the console) where implemented.
+
+### Curl
+
+```bash
+# ensure a rule per category + apply policy to everything (idempotent)
+curl -s -X POST $BASE/api/merchants/m1/agent/autoconfigure | python3 -m json.tool
+
+# draft 3 products from a brief (deterministic fallback without an AI key)
+curl -s -X POST $BASE/api/merchants/m1/agent/catalog \
+  -H 'content-type: application/json' \
+  -d '{"brief":"Warm designer lamps and dimmable bulbs for a reading corner","count":3}' \
+  | python3 -m json.tool
+
+# validation: an empty brief is a 400
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/api/merchants/m1/agent/catalog \
+  -H 'content-type: application/json' -d '{"brief":"  "}'
+# -> 400 INVALID_BRIEF
+```
+
+---
+
+## 5. Curl quickstart
 
 ```bash
 BASE=http://127.0.0.1:4173
@@ -253,7 +317,7 @@ A feed for the pull adapter is any JSON array or `{ "products": [...] }` of rows
 
 ---
 
-## 5. Privacy — the private range still never leaves the server
+## 6. Privacy — the private range still never leaves the server
 
 The connector does not change the public/private split:
 
@@ -263,7 +327,7 @@ The connector does not change the public/private split:
 
 ---
 
-## 6. Failure handling
+## 7. Failure handling
 
 | Failure | Behaviour |
 |---|---|
@@ -275,13 +339,17 @@ The connector does not change the public/private split:
 | Unknown merchant / category | `404 MERCHANT_NOT_FOUND` / `404 RULE_NOT_FOUND` |
 | Rule fails validation | `400 INVALID_RULE` / `400 INVALID_WINDOW`; the previous rule is unchanged |
 | Bad `PATCH` window | `400 INVALID_WINDOW` (`{error:{code,message}}`); the item is unchanged |
-| Reset | `POST /api/reset` restores seed connectors (disabled, `never`), seed rules (always-open) and drops imported inventory |
+| Agent catalog: empty/whitespace/missing `brief` | `400 INVALID_BRIEF`; nothing is created |
+| Agent catalog: `count` not a number | `400 INVALID_COUNT`; `count` is clamped to 1–8 otherwise |
+| AI unavailable or model error | deterministic 3-product fallback with `ai.used:false` and `ai.error`; the endpoint still succeeds |
+| Invalid drafted item | skipped and reported in `errors[]`; the valid drafts are still created |
+| Reset | `POST /api/reset` restores seed connectors (disabled, `never`), seed rules (always-open) and drops imported/agent-created inventory |
 
 ---
 
-## 7. What is real, and what is roadmap
+## 8. What is real, and what is roadmap
 
-**Real now:** connector config + validation, on-demand sync from a live HTTP JSON feed, upsert by sku, status/counts/error bookkeeping, the 60 s best-effort scheduler, per-category rules with validation, apply-to-existing re-derivation, inheritance for new/imported items, effective windows with item override, index/feed/categories filtering, the `409 NEGOTIATION_WINDOW_CLOSED` gate, and the merchant/market UI.
+**Real now:** connector config + validation, on-demand sync from a live HTTP JSON feed, upsert by sku, status/counts/error bookkeeping, the 60 s best-effort scheduler, per-category rules with validation, apply-to-existing re-derivation, inheritance for new/imported items, effective windows with item override, index/feed/categories filtering, the `409 NEGOTIATION_WINDOW_CLOSED` gate, the merchant/market UI, and **agent-assisted setup** (idempotent autoconfigure + agent-drafted products with a deterministic fallback).
 
 **Payload-only, no OAuth:** the `shopify` and `woocommerce` adapters accept a product payload (first variant price/sku, product type/category) and are honestly labelled *payload adapters* in the registry and the merchant UI. Live app installs are roadmap, not shipped.
 
@@ -293,12 +361,14 @@ The connector does not change the public/private split:
 - Retry with backoff, jitter and dead-lettering for the scheduler; per-connector observability.
 - Durable persistence (today state is in memory, so a restart returns to seed).
 - CSV/JSON sources are manual-sync only; a hosted "upload on a schedule" path would need storage.
+- Agent setup: draft proposals shown as a review/diff before creation, per-item accept/reject, and using live sales/inventory signals (today the draft sees only the brief + public merchant context).
 
 ---
 
-## 8. Tests and references
+## 9. Tests and references
 
-- **QA:** `test/e2e.js` — T81 (connector GET/PUT + sync from a local HTTP feed, import/update/upsert, success + failure bookkeeping), T82 (rule validation, apply re-derivation, new/imported item inheritance), T83 (open → closed → 409 → reopen; product override beats category), T84 (merchant/market UI markers + no private-range leak). See [test/README.md](test/README.md).
+- **QA:** `test/e2e.js` — T81 (connector GET/PUT + sync from a local HTTP feed, import/update/upsert, success + failure bookkeeping), T82 (rule validation, apply re-derivation, new/imported item inheritance), T83 (open → closed → 409 → reopen; product override beats category), T84 (merchant/market UI markers + no private-range leak), T85 (autoconfigure ensures + applies rules, idempotent, no AI), T86 (agent catalog 3-product fallback, rule inheritance, empty-brief 400, count cap), T87 (Agent setup UI markers, no manual Add product). See [test/README.md](test/README.md).
 - **Contracts:** [INVENTORY-AUTOMATION-SPEC.md](INVENTORY-AUTOMATION-SPEC.md) (frozen), [ADAPTER-SPEC.md](ADAPTER-SPEC.md), [INDEX-FEED-SPEC.md](INDEX-FEED-SPEC.md).
 - **Manual import payloads / index out:** [ADAPTERS.md](ADAPTERS.md).
-- **Run it:** `node server.js` → `/merchant.html` (Inventory source + Category rules + per-product window) → `/market.html` (window badges). `POST /api/reset` between demos.
+- **Contracts:** [AGENT-SETUP-SPEC.md](AGENT-SETUP-SPEC.md) (agent-assisted setup, frozen).
+- **Run it:** `node server.js` → `/merchant.html` (Agent setup + Inventory source + Category rules + per-product window) → `/market.html` (window badges). `POST /api/reset` between demos.

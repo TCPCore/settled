@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>bit-settled — merchant agent setup</title>
-<meta name="description" content="Northwind Audio merchant console: publish negotiation ranges, set the seller agent policy, and add products.">
+<meta name="description" content="Northwind Audio merchant console: let the seller agent auto-configure category rules and draft catalog items from a brief, then tune the private negotiation ranges.">
 <link rel="stylesheet" href="styles.css">
 <style>
 /* =========================================================
@@ -132,16 +132,34 @@
 .rules-empty{padding:22px 16px;text-align:center;color:var(--muted-2);font:600 9px/1.7 var(--mono)}
 .rules-empty strong{display:block;color:var(--muted);font:600 12px var(--sans);margin-bottom:4px}
 
-/* add product */
-.add-form{padding:14px 16px 16px}
-.add-grid{display:grid;grid-template-columns:minmax(0,1.3fr) 130px 150px;gap:10px}
-.add-grid .full{grid-column:1/-1}
-.add-grid .field{gap:5px}
-.add-grid .input{padding:9px 10px;font-size:11.5px}
-.add-grid textarea.input{min-height:64px;resize:vertical;font-family:var(--sans);font-size:11.5px;line-height:1.5}
-.add-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px}
-.add-note{font:600 8.5px/1.5 var(--mono);color:var(--muted-2);max-width:60ch}
-.add-error{font:600 9px var(--mono);color:var(--danger);margin-top:8px;min-height:0}
+/* agent setup */
+.agent-setup-body{padding:14px 16px 16px}
+.agent-setup-note{font:600 8.5px/1.6 var(--mono);color:var(--muted-2);border:1px solid rgba(43,217,160,.16);background:rgba(43,217,160,.035);border-radius:8px;padding:8px 10px}
+.agent-setup-note b{color:var(--emerald)}
+.agent-setup-grid{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:14px;align-items:start;margin-top:12px}
+.agent-setup-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.agent-setup-field .field-label{display:flex;align-items:center;justify-content:space-between;gap:8px;font:700 8px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted-2)}
+.agent-setup-field .input{width:100%;min-width:0;background:#081120;border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:9px 10px;font:11.5px/1.5 var(--sans);resize:vertical;transition:.15s;color-scheme:dark}
+.agent-setup-field .input:hover{border-color:var(--line-2)}
+.agent-setup-field .input:focus{outline:none;border-color:var(--emerald-line);box-shadow:0 0 0 2px rgba(43,217,160,.1)}
+.agent-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.agent-chip{appearance:none;border:1px solid var(--line-2);background:rgba(8,16,29,.6);color:var(--muted);border-radius:999px;padding:5px 9px;font:600 8.5px var(--mono);cursor:pointer;transition:.15s;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.agent-chip:hover{color:var(--ink-2);border-color:var(--emerald-line);background:var(--emerald-dim)}
+.agent-setup-side{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.agent-setup-hint{font:600 8px/1.55 var(--mono);color:var(--muted-2)}
+.agent-setup-error{font:600 9px/1.5 var(--mono);color:var(--danger);padding:9px 0 0;min-height:0}
+.agent-setup-error:empty{display:none}
+.agent-setup-result{margin:12px 0 0;border:1px solid var(--emerald-line);border-radius:9px;background:rgba(43,217,160,.04);padding:10px 11px}
+.agent-setup-result.is-warn{border-color:var(--gold-line);background:rgba(245,196,81,.04)}
+.agent-result-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font:700 9px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--emerald);flex-wrap:wrap}
+.agent-setup-result.is-warn .agent-result-head{color:var(--gold)}
+.agent-result-sub{margin-top:6px;font:600 8.5px/1.55 var(--mono);color:var(--muted)}
+.agent-created{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+.agent-created li{display:flex;align-items:baseline;gap:8px;border-top:1px solid rgba(29,44,68,.5);padding-top:5px;font-size:10.5px;color:var(--ink-2);min-width:0}
+.agent-created li:first-child{border-top:0;padding-top:0}
+.agent-created .ac-name{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.agent-created .ac-meta{font:600 8px var(--mono);color:var(--muted-2);white-space:nowrap}
+.agent-created .ac-price{font:700 9px var(--mono);color:var(--emerald);white-space:nowrap}
 
 /* import catalog */
 .import-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:14px;padding:14px 16px 16px}
@@ -249,8 +267,7 @@
   .merchant-hero-actions .btn{flex:1}
   .pr-fields{grid-template-columns:1fr}
   .pr-group.policy{grid-column:auto}
-  .add-grid{grid-template-columns:1fr 1fr}
-  .add-grid .full{grid-column:1/-1}
+  .agent-setup-grid{grid-template-columns:1fr}
   .pr-preview{flex-basis:100%}
   .pr-actions{margin-left:0;width:100%;justify-content:space-between}
   .pr-status{text-align:left;max-width:none}
@@ -263,7 +280,6 @@
 @media (max-width:600px){
   .pr-head-right{margin-left:0;width:100%;justify-content:space-between}
   .pr-id{flex-basis:calc(100% - 51px)}
-  .add-grid{grid-template-columns:1fr}
   .inv-grid{grid-template-columns:1fr}
   .inv-stats{grid-template-columns:1fr 1fr}
 }
@@ -320,6 +336,49 @@
 
     <div class="merchant-layout">
       <div class="merchant-main">
+        <section class="panel" id="agentSetupPanel">
+          <div class="panel-head">
+            <div style="min-width:0">
+              <div class="panel-title">Agent setup <span class="badge" id="agentSetupBadge">agent</span></div>
+              <div class="panel-sub" id="agentSetupStatus">Northwind Seller Agent · — products · — categories · policy configured</div>
+            </div>
+            <div class="catalog-actions">
+              <button class="btn btn-ghost btn-sm" id="agentSetupRefreshBtn" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v6h-6"/></svg>
+                Refresh
+              </button>
+              <button class="btn btn-primary btn-sm" id="autoconfigureBtn" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M4.2 16.5l2.6-1.5M17.2 9l2.6-1.5"/><circle cx="12" cy="12" r="3.2"/></svg>
+                Auto-configure catalog
+              </button>
+            </div>
+          </div>
+          <div class="agent-setup-body">
+            <div class="agent-setup-note"><b>The agent reads your catalog and applies category rules.</b> You can still tune any item below.</div>
+            <div class="agent-setup-grid">
+              <div class="agent-setup-field">
+                <label class="field-label" for="agentBrief"><span>Describe what you sell</span><span class="tiny muted">3 draft items</span></label>
+                <textarea class="input" id="agentBrief" rows="3" placeholder="e.g. Premium studio headphones and wireless earbuds for commuters, $79–$349."></textarea>
+                <div class="agent-chips" id="agentBriefChips">
+                  <button class="agent-chip" type="button" data-brief="Premium studio headphones and wireless earbuds for commuters, $79–$349.">Studio audio · $79–$349</button>
+                  <button class="agent-chip" type="button" data-brief="Warm dimmable home lighting and smart bulbs, $29–$199.">Home lighting · $29–$199</button>
+                  <button class="agent-chip" type="button" data-brief="Travel gadgets and fast-charging accessories under $150.">Travel gadgets · under $150</button>
+                </div>
+              </div>
+              <div class="agent-setup-side">
+                <button class="btn btn-primary" id="agentAddBtn" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                  Add with agent
+                </button>
+                <div class="agent-setup-hint">Drafts 3 items from the brief. Category rules apply and every item stays editable below.</div>
+              </div>
+            </div>
+            <div class="agent-setup-error" id="agentSetupError" role="alert"></div>
+            <div class="agent-setup-result" id="agentSetupResult" aria-live="polite" hidden></div>
+          </div>
+          <div class="panel-foot"><span id="agentSetupFoot">Auto-configure is deterministic and offline; Add with agent uses the AI drafting helper with a deterministic fallback.</span><span class="mono" id="agentSetupMerchantId">m1</span></div>
+        </section>
+
         <section class="panel">
           <div class="panel-head">
             <div style="min-width:0">
@@ -331,10 +390,6 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v6h-6"/></svg>
                 Refresh
               </button>
-              <a class="btn btn-primary btn-sm" href="#addProductPanel" id="addTopBtn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                Add product
-              </a>
             </div>
           </div>
           <div class="catalog-list" id="catalogList" aria-live="polite">
@@ -441,32 +496,6 @@
             </table>
           </div>
           <div class="rules-foot"><span id="rulesFoot">Category windows are inherited by items unless a product override is set.</span><span class="mono" id="rulesMerchantId">m1</span></div>
-        </section>
-
-        <section class="panel" id="addProductPanel">
-          <div class="panel-head">
-            <div>
-              <div class="panel-title">Add product</div>
-              <div class="panel-sub">Defaults are derived from the list price — tune the private/public range right after.</div>
-            </div>
-            <span class="badge">POST /api/merchants/m1/catalog</span>
-          </div>
-          <form class="add-form" id="addForm" novalidate>
-            <div class="add-grid">
-              <div class="field"><label class="field-label" for="addName">Product name</label><input class="input" id="addName" type="text" placeholder="e.g. Aurora Studio headphones" autocomplete="off"></div>
-              <div class="field"><label class="field-label" for="addPrice">Price (USD)</label><input class="input" id="addPrice" type="number" min="1" step="1" placeholder="249"></div>
-              <div class="field"><label class="field-label" for="addCategory">Category</label><input class="input" id="addCategory" type="text" placeholder="Audio" autocomplete="off"></div>
-              <div class="field full"><label class="field-label" for="addDescription">Description</label><textarea class="input" id="addDescription" placeholder="Short buyer-facing description"></textarea></div>
-            </div>
-            <div class="add-actions">
-              <span class="add-note">The seller agent will use the generated policy until you edit it. Private ranges are never exposed by the public index.</span>
-              <button class="btn btn-primary" id="addSubmit" type="submit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                Add product
-              </button>
-            </div>
-            <div class="add-error" id="addError" role="alert"></div>
-          </form>
         </section>
 
         <section class="panel" id="importPanel">

@@ -868,6 +868,19 @@ async function handleCatalogUpdate(req, res, merchantId, productId) {
   sendJson(res, 200, catalog.updateProduct(merchantId, productId, body));
 }
 
+// ------------------------------------------ agent-assisted setup (§AI-SETUP) --
+
+async function handleAgentAutoconfigure(req, res, merchantId) {
+  // Body is optional; consume it so clients can send {} (or nothing).
+  await readJson(req);
+  sendJson(res, 200, catalog.autoconfigure(merchantId));
+}
+
+async function handleAgentCatalog(req, res, merchantId) {
+  const body = await readJson(req);
+  sendJson(res, 200, await catalog.agentAddProducts(merchantId, body));
+}
+
 // --------------------------------------------------- adapters & index feed ---
 
 function handleAdapters(req, res) {
@@ -1178,6 +1191,12 @@ async function routeApi(req, res, method, pathname, query) {
     if (seg.length === 5 && seg[3] === 'rules') {
       if (seg[4] === 'apply' && method === 'POST') return handleRulesApply(req, res, id);
       if (method === 'PUT') return handleRulePut(req, res, id, seg[4]);
+    }
+    if (seg.length === 5 && seg[3] === 'agent') {
+      if (seg[4] === 'autoconfigure' && method === 'POST') {
+        return handleAgentAutoconfigure(req, res, id);
+      }
+      if (seg[4] === 'catalog' && method === 'POST') return handleAgentCatalog(req, res, id);
     }
   }
 

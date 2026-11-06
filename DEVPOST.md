@@ -99,7 +99,7 @@ We would rather say this first.
 - AI negotiation that is genuinely constrained: same accepted price on the deterministic path, model-generated transcript when a key is present, no scenario where the model can exceed the mandate.
 - Real PayPal sandbox money path in the same app as the SIM fallback, with clean failures.
 - A working refund in ~1.2s that updates reserve, score and tier in the same screen — the moment the pitch turns on.
-- The full e2e suite passing locally with zero external dependencies: **82/82 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
+- The full e2e suite passing locally with zero external dependencies: **85/85 assertions** covering trust, passport, contract, AI fallback, claim AI and the PayPal SIM create/capture/refund path.
 
 ## What we learned
 

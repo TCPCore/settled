@@ -23,6 +23,14 @@
 .demo-progress{display:flex;align-items:center;gap:8px;font:700 9px var(--mono);letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .demo-progress b{color:var(--emerald);font-weight:800}
 
+/* merchant agent setup strip */
+.demo-agent-strip{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(90deg,rgba(43,217,160,.07),rgba(8,16,29,.7));padding:11px 14px;margin:2px 0 14px;flex-wrap:wrap}
+.das-left{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}
+.das-kicker{font:800 8px var(--mono);letter-spacing:.14em;color:var(--emerald);text-transform:uppercase}
+.das-left b{font-size:12px;color:var(--ink)}
+.das-status{font:600 9px var(--mono);color:var(--muted-2)}
+.das-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.das-link{font:700 9px var(--mono);letter-spacing:.06em;color:var(--emerald);text-decoration:none}
 /* scorecard */
 .demo-scorecard{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:6px 0 18px}
 .axis-card{position:relative;border:1px solid var(--line);border-radius:13px;padding:12px 13px 11px;background:linear-gradient(180deg,rgba(17,28,46,.92),rgba(11,20,34,.96));overflow:hidden;transition:border-color .35s,background .35s,box-shadow .35s;min-width:0}
@@ -379,6 +387,18 @@
           <span id="modeNote">deterministic · no funds move</span>
           <span class="demo-progress" style="margin-left:6px">steps <b id="progressCount">0 / 5</b></span>
         </div>
+      </div>
+    </section>
+
+    <section class="demo-agent-strip" aria-label="Merchant agent setup">
+      <div class="das-left">
+        <span class="das-kicker">Merchant agent</span>
+        <b>Northwind Seller Agent</b>
+        <span class="das-status" id="agentSetupStatus">catalog ready · policy pending</span>
+      </div>
+      <div class="das-actions">
+        <button class="btn btn-ghost btn-sm" id="autoConfigureBtn" type="button">Auto-configure catalog</button>
+        <a class="das-link" href="merchant.html">Open merchant console &rarr;</a>
       </div>
     </section>
 

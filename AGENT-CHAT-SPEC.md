@@ -43,7 +43,7 @@ In step 3, above/replacing the current reasoning cards, render **“Agent-to-age
 - No new external assets; keep IDs; additive DOM only; `Run full demo` still 5/5.
 
 ## Acceptance
-- `node --check` clean; `npm test` 82/82.
+- `node --check` clean; `npm test` 85/85.
 - Headless `/demo.html` + Run full demo: 5/5, chat visible with 3 bubbles, AI badges, no console errors, no overflow at 1440/1280.
 - AI off (no key): dialogue still renders with deterministic messages and `FALLBACK` badge.
 - One model call, step 3 still ~3–4 s on Ollama Cloud.

@@ -195,6 +195,8 @@
       btn.addEventListener('click', tryRogueBot);
     });
     el.runAll.addEventListener('click', runAll);
+    var autoBtn = document.getElementById('autoConfigureBtn');
+    if (autoBtn) autoBtn.addEventListener('click', autoConfigure);
     el.reset.addEventListener('click', resetDemo);
     el.clearLog.addEventListener('click', clearLog);
 
@@ -331,6 +333,26 @@
       state.busy = false;
       if (!state.running) setControlsDisabled(false);
     }
+  }
+
+  function autoConfigure() {
+    var btn = document.getElementById('autoConfigureBtn');
+    var status = document.getElementById('agentSetupStatus');
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'agent configuring catalog…';
+    S.api('/merchants/' + MERCHANT_ID + '/agent/autoconfigure', { method: 'POST' })
+      .then(function (res) {
+        var products = (res && res.products) || [];
+        var cats = (res && res.categories) || [];
+        var catLabel = cats.length === 1 ? 'category' : 'categories';
+        if (status) status.textContent = 'configured · ' + products.length + ' products · ' + cats.length + ' ' + catLabel;
+        S.toast('Merchant agent configured ' + products.length + ' products across ' + cats.length + ' ' + (cats.length === 1 ? 'category' : 'categories') + '.', 'ok');
+      })
+      .catch(function (err) {
+        if (status) status.textContent = 'configuration failed';
+        S.toast((err && err.message) || 'Agent configuration failed.', 'err');
+      })
+      .then(function () { if (btn) btn.disabled = false; });
   }
 
   async function runAll() {
