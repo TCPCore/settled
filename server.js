@@ -322,7 +322,7 @@ async function handleCreateOrder(req, res, merchantId) {
       paymentResult = await paypal.createOrder({
         amount,
         currency: 'USD',
-        returnUrl: `http://${HOST}:${PORT}/store.html?merchant=${encodeURIComponent(merchantId)}`,
+        returnUrl: `${process.env.PUBLIC_BASE_URL || `http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${PORT}`}/store.html?merchant=${encodeURIComponent(merchantId)}`,
       });
     } else {
       paymentResult = { id: 'SIM-' + randHex(8), approval_url: null, simulated: true };
