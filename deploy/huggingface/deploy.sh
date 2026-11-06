@@ -35,6 +35,8 @@ git clone "https://huggingface.co/spaces/$SPACE_ID" "$TMP/space"
 
 cp "$ROOT/deploy/huggingface/README.md" "$TMP/space/README.md"
 cp "$ROOT/deploy/huggingface/Dockerfile" "$TMP/space/Dockerfile"
+# Always bust Docker's git-clone cache so a new app commit is actually built.
+sed -i.bak "s/^ARG CACHE_BUST=.*/ARG CACHE_BUST=$(date -u +%Y%m%d%H%M%S)/" "$TMP/space/Dockerfile"
 
 cd "$TMP/space"
 git config user.name "cptlight"

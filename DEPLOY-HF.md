@@ -20,6 +20,25 @@ Or run locally:
 HF_TOKEN=hf_xxx HF_USER=<your-hf-user> ./deploy/huggingface/deploy.sh
 ```
 
+## Space secrets (live mode)
+
+Set these in **Space → Settings → Variables and secrets** (or via the HF API):
+
+| Secret | Value |
+|---|---|
+| `PAYPAL_LIVE` | `1` |
+| `PAYPAL_CLIENT_ID` | PayPal sandbox client ID |
+| `PAYPAL_CLIENT_SECRET` | PayPal sandbox secret |
+| `PAYPAL_ENV` | `sandbox` |
+| `AI_PROVIDER` | `openai` |
+| `AI_API_KEY` | model API key |
+| `AI_MODEL` | `gpt-oss:20b` |
+| `AI_BASE_URL` | `https://ollama.com/v1` |
+| `AI_TIMEOUT_MS` | `30000` |
+| `PUBLIC_BASE_URL` | `https://<user>-bit-settled.hf.space` |
+
+Never put these in the Dockerfile or repo. The Space is public and sandbox-only; rotate keys after judging.
+
 ## Keeping it live for judging
 
 - HF **free CPU-basic** sleeps after **48 hours of inactivity**. A judge opening the URL wakes it; this is fine for a link, but not “always warm”.

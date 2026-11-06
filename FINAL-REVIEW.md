@@ -1,6 +1,6 @@
 # Final review — Settled for the PayPal AI Hackathon
 
-*2026-11-04 · one working prototype, one hosted SIM demo, one live-verified PayPal sandbox flow, one submission deadline (Nov 12, 2:00 PM PT).*
+*2026-11-04 · one working prototype, one hosted live-sandbox demo, one live-verified PayPal sandbox flow, one submission deadline (Nov 12, 2:00 PM PT).*
 
 ---
 
@@ -22,7 +22,7 @@
 | **Trust engine** | HMAC-SHA256 credential, SHA-256 hash-chained event log, risk tiers 35/90/150 bps, reserve accounting, instant claims |
 | **Tests** | `npm test` → **85/85**, including PayPal SIM create/capture/refund and AI fallback |
 | **Repo** | public Apache-2.0 repo: https://github.com/cptlight/bit-settled |
-| **Deployable demo** | Live HF Space: https://tomscot-bit-settled.hf.space/start.html (SIM, no keys); `Dockerfile`, `render.yaml`, `DEPLOY-HF.md` |
+| **Deployable demo** | Live HF Space: https://tomscot-bit-settled.hf.space/start.html (live PayPal sandbox + live AI; secrets server-side); `Dockerfile`, `render.yaml`, `DEPLOY-HF.md` |
 | **Narrative** | [WRITEUP.md](WRITEUP.md), [JUDGE-BRIEF.md](JUDGE-BRIEF.md), [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md), [HACKATHON-PROOF.md](HACKATHON-PROOF.md) |
 
 ---
@@ -152,7 +152,7 @@ Typical rubric: **technical implementation, design, potential impact, innovation
 ## 5. Hosting the demo (private until submission)
 
 ### What is running now
-- **Public SIM demo** via a private, unlisted Cloudflare quick tunnel: **do not publish the URL**. It has no keys, no money, no secrets. It is for your testing only. If the tunnel dies, restart it (below); for the submission, use Render.
+- **Hosted live-sandbox demo:** https://tomscot-bit-settled.hf.space/start.html — PayPal sandbox + live AI; keys are Space secrets; no real money. **Run full demo** stays deterministic; use **Live checkout** or step 4 for real sandbox approval/capture.
 - **Local live instance** on `:4173` with PayPal sandbox + Ollama Cloud (private).
 
 ### Recommended submission host — Render
