@@ -16,7 +16,7 @@
 
 | Layer | Evidence |
 |---|---|
-| **Working demo** | `http://127.0.0.1:4173/demo.html` — 5-step run, scorecard 5/5, live JSON log, agent-to-agent chat |
+| **Working demo** | `http://127.0.0.1:4173/demo.html` — 5-step run, scorecard 5/5, live JSON log, agent-to-agent chat; public SIM URL is a temporary tunnel |
 | **PayPal live sandbox** | order `1TD07351F78687411` → capture `05T456380E807962V` (`REFUNDED`) → refund `2KN47117H3971321W` (`COMPLETED`, $249); verified via PayPal API — [LIVE-TEST.md](LIVE-TEST.md) |
 | **AI** | Ollama Cloud `gpt-oss:20b`; one-call negotiation plan; claim explainer; policy clamps prices; fallback without keys |
 | **Trust engine** | HMAC-SHA256 credential, SHA-256 hash-chained event log, risk tiers 35/90/150 bps, reserve accounting, instant claims |
@@ -190,10 +190,10 @@ With keys: `docker run --rm -p 8080:8080 --env-file .env settled-demo`.
 |---|---|---|---|
 | **P0** | Video not recorded | 2:55 take per [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md); step 3 chat + live PayPal capture/refund; upload public YouTube | You |
 | **P0** | `VIDEO_URL_HERE` empty | Fill after upload; submit on Devpost | You |
-| **P1** | Merchant install is not a packaged plugin | `/integrate.html` now shows the 3 steps and what PayPal vs the merchant builds; still add a drop-in embed + OpenAPI/MCP manifest, and keep saying "prototype" | Build |
+| **P1** | Merchant install is a hosted-checkout prototype, not a native cart plugin | `/integrate.html`, `/embed-demo.html`, OpenAPI, agent manifest and MCP stdio are built; native Shopify/Woo cart plugins remain roadmap | Build |
 | **P1** | Render service not created | Connect repo, keep SIM, test URL, keep unlisted | You |
 | **P2** | No real merchant OAuth/Partner Referral | Document the production path; don't claim it in the demo | Docs |
-| **P2** | MCP endpoint absent | Add `settled.verify/negotiate/claim` MCP tools after the hackathon | Build |
+| **P2** | MCP stdio exists, hosted MCP auth/remote deployment does not | Document stdio usage now; add hosted MCP auth after the hackathon | Build |
 | **P2** | Insurance/underwriting partner | One term sheet target; demo pool caveat | BD |
 
 **Critical path:** record → upload → fill Devpost → submit early. Do not add features after T-24h.
