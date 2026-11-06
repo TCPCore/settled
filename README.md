@@ -4,15 +4,15 @@
 
 **Design:** the interface follows PayPal’s design philosophy — blue-first, simple, trusted, human, accessible. See **[DESIGN-PHILOSOPHY.md](DESIGN-PHILOSOPHY.md)**.
 
-A working prototype of **Trust Settlement**: a portable, HMAC-signed merchant trust ledger that prices buyer protection at checkout and pays claims instantly from a merchant reserve. Built for the idea in [../paypal-parley/TRUST-SETTLEMENT.md](../paypal-parley/TRUST-SETTLEMENT.md).
+A working prototype of **Trust Settlement**: a portable, HMAC-signed merchant trust ledger that prices buyer protection at checkout and pays claims instantly from a merchant reserve. The underlying concept is documented in [WRITEUP.md](WRITEUP.md).
 
 Zero dependencies. Node built-ins only.
 
 ```bash
-cd settled
+cd bit-settled
 node server.js           # → http://127.0.0.1:4173
 npm start                # same
-npm test                 # e2e API tests (spawns its own server, port 4173)
+npm test                 # e2e API tests (spawns its own server, port 4400)
 ```
 
 ## Pages
@@ -102,7 +102,7 @@ Read these in order:
 ## Hackathon demo (4 minutes)
 
 ```bash
-cd settled
+cd bit-settled
 node server.js          # http://127.0.0.1:4173
 open http://127.0.0.1:4173/demo.html
 ```
@@ -177,7 +177,7 @@ The repo is the submission: working prototype + Apache-2.0 license + Devpost tex
 ### Run and verify
 
 ```bash
-cd settled
+cd bit-settled
 node server.js        # → http://127.0.0.1:4173/demo.html
 npm test              # full e2e suite — 85/85 assertions (trust, passport, contract, AI, PayPal SIM)
 ```

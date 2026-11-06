@@ -131,7 +131,7 @@ This is the honest audit, not the pitch.
 ## 7. Live demo reliability
 
 **Pre-flight (T-15 min):**
-1. `cd settled && lsof -ti :4173 | xargs kill; node server.js`
+1. `cd bit-settled && lsof -ti :4173 | xargs kill; node server.js`
 2. `curl -X POST http://127.0.0.1:4173/api/reset`
 3. Open `/demo.html`, click **Run full demo** once, confirm 5/5 and **ALL FIVE AXES 8+**, click **Reset**.
 4. Close heavy apps; disable notifications; set display 1440p or 1600×900; zoom 100%.

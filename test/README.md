@@ -5,7 +5,7 @@
 ## Run
 
 ```bash
-cd settled
+cd bit-settled
 npm test                 # = node test/e2e.js
 node test/e2e.js         # same
 ```

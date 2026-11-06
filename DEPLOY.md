@@ -14,7 +14,7 @@ The app is a single zero-dependency Node process. Public judges get **SIM mode**
 ## Option B — Docker
 
 ```bash
-cd settled
+cd bit-settled
 docker build -t settled-demo .
 docker run --rm -p 8080:8080 settled-demo
 # open http://127.0.0.1:8080/demo.html

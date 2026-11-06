@@ -28,7 +28,7 @@ The model never sets an illegal price: the server computes the allowed candidate
 ## Reproduce
 
 ```bash
-cd settled
+cd bit-settled
 cp .env.example .env          # fill AI + PayPal sandbox values
 set -a; . ./.env; set +a
 node server.js                # → http://127.0.0.1:4173/demo.html

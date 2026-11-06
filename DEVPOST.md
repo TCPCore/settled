@@ -7,6 +7,7 @@
 > **Links (fill before submitting)**
 > - Repo: https://github.com/cptlight/bit-settled (Apache-2.0 — see [LICENSE](LICENSE))
 > - Demo video (<3 min, YouTube): `VIDEO_URL_HERE`
+> - Hosted SIM demo: `HOSTED_DEMO_URL_HERE` (deploy with the included Render blueprint; the local demo is the fallback)
 > - Run it locally: `node server.js` → `http://127.0.0.1:4173/demo.html`
 > - Long-form write-up: [WRITEUP.md](WRITEUP.md) · judge brief: [JUDGE-BRIEF.md](JUDGE-BRIEF.md)
 
@@ -122,7 +123,7 @@ We would rather say this first.
 ## Try it (60 seconds)
 
 ```bash
-cd settled
+cd bit-settled
 node server.js                    # http://127.0.0.1:4173
 open http://127.0.0.1:4173/demo.html
 ```

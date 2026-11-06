@@ -2,7 +2,7 @@
 
 > Master pitch (protagonist, judge rubric, Q&A, reliability, 48h runbook): [HACKATHON-PROOF.md](HACKATHON-PROOF.md). This file is the stage-direction backup.
 
-**Before you start:** `cd settled && node server.js` → open `http://127.0.0.1:4173/demo.html`. Click **Reset** once. Have the dashboard (`/`) and agent console (`/agent.html`) open in other tabs as backup. If the Wi-Fi is hostile, the demo runs entirely in SIM mode — no PayPal credentials needed. If you have a sandbox client-id/secret, start with `PAYPAL_LIVE=1 PAYPAL_CLIENT_ID=… PAYPAL_CLIENT_SECRET=… node server.js` and step 4 will show a real **Open PayPal approval** link; otherwise it shows `SIM` and the story is identical.
+**Before you start:** `cd bit-settled && node server.js` → open `http://127.0.0.1:4173/demo.html`. Click **Reset** once. Have the dashboard (`/`) and agent console (`/agent.html`) open in other tabs as backup. If the Wi-Fi is hostile, the demo runs entirely in SIM mode — no PayPal credentials needed. If you have a sandbox client-id/secret, start with `PAYPAL_LIVE=1 PAYPAL_CLIENT_ID=… PAYPAL_CLIENT_SECRET=… node server.js` and step 4 will show a real **Open PayPal approval** link; otherwise it shows `SIM` and the story is identical.
 
 ---
 

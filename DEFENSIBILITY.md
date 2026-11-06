@@ -36,7 +36,7 @@
 
 ```bash
 # local / Docker / Render — all the same zero-dependency Node process
-cd settled && node server.js                          # http://127.0.0.1:4173
+cd bit-settled && node server.js                          # http://127.0.0.1:4173
 docker build -t settled-demo . && docker run --rm -p 8080:8080 settled-demo
 # Render: connect the repo, render.yaml creates settled-demo (SIM: PAYPAL_LIVE=0, AI_PROVIDER=none)
 ```

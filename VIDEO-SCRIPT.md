@@ -8,7 +8,7 @@
 
 ## Pre-roll (T−15 min)
 
-- `cd settled && lsof -ti :4173 | xargs kill; node server.js` with the sandbox + AI env set (`PAYPAL_LIVE=1`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_ENV=sandbox`, `AI_API_KEY`).
+- `cd bit-settled && lsof -ti :4173 | xargs kill; node server.js` with the sandbox + AI env set (`PAYPAL_LIVE=1`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_ENV=sandbox`, `AI_API_KEY`).
 - Open `http://127.0.0.1:4173/demo.html`; click **Reset**; confirm the header pills read **AI: <model>** and **PAYPAL SANDBOX** (not SIM).
 - Run **Run full demo** once to warm the server, then **Reset** again. The take starts from a clean state.
 - Browser: fresh profile, bookmarks bar hidden, zoom 100%, window 1600×900 (upscale to 1440p in the editor), notifications off, other tabs closed.

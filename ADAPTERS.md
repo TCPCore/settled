@@ -264,7 +264,7 @@ Options: `data-position="bottom-right|bottom-left"`, `data-theme="dark|light"`, 
 ## 9. Try it in 60 seconds
 
 ```bash
-cd settled && node server.js          # http://127.0.0.1:4173
+cd bit-settled && node server.js          # http://127.0.0.1:4173
 
 # indexer: discover → page → read one offer
 curl -s http://127.0.0.1:4173/api/index/manifest | python3 -m json.tool

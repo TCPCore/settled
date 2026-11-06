@@ -1,6 +1,6 @@
 # PayPal AI Hackathon 2026 — fit assessment & 8-day submission plan
 
-> **Status (Nov 4, after the parallel build):** the two P0 gaps are closed in code — real AI negotiation + AI claim explainer (`lib/ai.js`, deterministic fallback) and live PayPal sandbox create/capture/refund (`lib/paypal-flow.js`); demo UI updated; **85/85 e2e pass**. Remaining are environment/account steps only: add a real AI key and PayPal sandbox credentials, dry-run the live flow, record the <3:00 video, push the repo, fill the two Devpost links, and submit.
+> **Status (Nov 6, code review):** the core build is done and verified — **85/85 e2e pass**, live AI negotiation (`gpt-oss:20b`, `ai.used:true`) and live PayPal sandbox order creation verified, real sandbox capture/refund IDs recorded in `LIVE-TEST.md`, public GitHub repo with **Apache-2.0**, public SIM demo and all judge pages working. Remaining before submission: **record the <3:00 YouTube video**, **deploy/confirm a persistent hosted demo URL** (Render blueprint is ready; a quick tunnel is temporary), fill the Devpost links/tags, and submit by **Nov 12, 2:00 PM PT**.
 
 *Rules as published by PayPal/Devpost (official page is Cloudflare-blocked to automated fetch; cross-checked against the PayPal developer blog and two organizer summaries). Verify the deadline on the Devpost page before submitting.*
 
@@ -29,17 +29,17 @@
 
 | Requirement | Current state | Verdict |
 |---|---|---|
-| **PayPal sandbox integration** | `lib/paypal.js` implements OAuth + Orders v2 create/capture + approval URL; `/api/paypal/capture`; SIM fallback. **The demo defaults to SIM and the live approval/return flow has not been exercised.** | ⚠️ **At risk** — must run real sandbox orders in the video and show real IDs |
-| **AI in the core** | Agent passports, negotiation policy, risk engine, claim adjudication are **deterministic**, not a model. The "agents" are automated but not AI/ML. | ⚠️ **At risk** — judges may rule the AI requirement unmet |
+| **PayPal sandbox integration** | OAuth + Orders v2 create/capture + Payments v2 refund; live sandbox order creation verified Nov 6; capture/refund IDs in `LIVE-TEST.md`. Public demo is SIM; the manual step uses the live rail when keys are set. | ✅ **Met** (show live IDs in video) |
+| **AI in the core** | LLM buyer/merchant negotiation with policy guardrails, AI claim explainer, and agent-drafted catalog; deterministic fallback. Live AI run verified Nov 6 (`ai.used:true`, $237 accepted). | ✅ **Met** |
 | **Working prototype** | Node app, 5-step demo console, dashboard, agent console, 85/85 e2e tests, screenshots | ✅ **Strong** |
-| **Public repo + license** | Code exists locally; **no git repo, no LICENSE** | ❌ **Must do** |
-| **Demo video <3 min** | None | ❌ **Must do** |
-| **Devpost text** | `WRITEUP.md`, `JUDGE-BRIEF.md`, `HACKATHON-PROOF.md` ready to adapt | ✅ **Easy** |
+| **Public repo + license** | `https://github.com/cptlight/bit-settled`, public, Apache-2.0, clean history. | ✅ **Met** |
+| **Demo video <3 min** | None | ❌ **Still missing** |
+| **Devpost text** | `DEVPOST.md` draft is complete except the video URL and hosted demo link. | ✅ **Draft ready** |
 | **Meaningful progress in window** | Built Nov 3–4, inside Oct 1–Nov 12 | ✅ |
 | **Eligibility** | Depends on entrant's residence/age (not disclosed) | ⚠️ Confirm |
 | **Impact / innovation / design / presentation** | Strong: 51% abandonment, $1.3B cost centre, portable credential + priced protection + instant recourse, polished demo | ✅ |
 
-**Honest verdict:** *not submission-ready yet.* The prototype and story are strong, but the two **core requirements** are currently only partly demonstrated: the AI is deterministic and the PayPal rail is simulated by default. Fix those, add the repo/license/video, and it is a strong contender for **Best Use of Agentic Commerce**, **Most Impactful**, and **Best Demo Delivery** — and potentially an overall placement.
+**Honest verdict:** *the product and repo are submission-ready; the submission package is not.* The two core requirements are now demonstrated (live AI + live sandbox order creation; capture/refund IDs recorded), the repo/license are public, and the demo works. The remaining blockers are presentation/ops: the **<3:00 video** and a **persistent hosted demo URL** (the current quick tunnel is temporary). With those, it is a strong contender for **Best Use of Agentic Commerce**, **Most Impactful**, and **Best Demo Delivery**.
 
 ---
 
