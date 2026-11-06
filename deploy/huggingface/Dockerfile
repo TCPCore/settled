@@ -1,5 +1,6 @@
 # Hugging Face Docker Space for bit-settled.
 # Builds directly from the public GitHub repo so this Space stays in sync.
+# cache-bust: 2026-11-06 live-sandbox
 FROM node:22-alpine
 
 RUN apk add --no-cache git ca-certificates
