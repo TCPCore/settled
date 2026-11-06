@@ -181,7 +181,7 @@
     el.modeBadge.textContent = live ? 'PAYPAL SANDBOX' : 'SIM';
     el.modeBadge.className = 'badge ' + (live ? 'blue' : 'gold');
     el.modeNote.textContent = live
-      ? (state.paypalClientId ? 'live sandbox · real capture ids' : 'live server · PayPal client not configured')
+      ? (state.paypalClientId ? 'live sandbox · step 4 manual is real' : 'live server · PayPal client not configured')
       : 'deterministic · no funds move';
     el.logFoot.textContent = live ? 'LIVE' : 'SIM';
   }
