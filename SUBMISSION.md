@@ -37,7 +37,7 @@ Buyers don't trust unfamiliar checkout. AI agents can now pay, but they cannot r
 ## Accomplishments
 
 - End-to-end 5-step demo: **5/5**, $237 refund in ~1.2s.
-- **85/85** e2e tests; zero dependencies; judges can run it with no keys.
+- **85/85** e2e tests; zero dependencies. The hosted demo uses server-side secrets; local judges can run SIM with no keys.
 - Real PayPal sandbox capture/refund verified: order `1TD07351F78687411` → capture `05T456380E807962V` (REFUNDED) → refund `2KN47117H3971321W` (COMPLETED, $249).
 - Merchant agent setup, category rules, windows, inventory pull, index feed, negotiation, contract, checkout, claim and dashboard all work.
 - Public repo under Apache-2.0.
