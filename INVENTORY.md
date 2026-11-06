@@ -325,6 +325,8 @@ The connector does not change the public/private split:
 - the merchant-only catalog view (`GET /api/merchants/:id/catalog`) and the connector/rules endpoints are the merchant console's private surface;
 - T84 scans the market assets and the public endpoints for the private keys; T73/T67 do the same for the feed and index. No patch to the connector or rules layer is allowed to open that hole.
 
+**SSRF guard:** connector fetches reject loopback, RFC1918, link-local and `.local` hosts by default; `CONNECTOR_ALLOW_PRIVATE=1` is for local test feeds only. Redirects are not followed. A production connector should also pin DNS and use an allowlist.
+
 ---
 
 ## 7. Failure handling

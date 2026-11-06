@@ -400,7 +400,7 @@
       S.setBusy(payBtn, true, 'Creating protected order…');
       S.api('/merchants/' + encodeURIComponent(m.id) + '/orders', {
         method: 'POST',
-        body: { product_id: product.id, buyer: { name: name, email: email } }
+        body: { product_id: product.id, buyer: { name: name, email: email }, simulate: true }
       }).then(function (res) {
         state.order = res.order;
         state.receipt = res.receipt || {};

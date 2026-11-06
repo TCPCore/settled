@@ -21,7 +21,7 @@ npm test                 # e2e API tests (spawns its own server, port 4400)
 |---|---|
 | `http://127.0.0.1:4173/start.html` | **Demo hub** — one page linking every surface and the machine endpoints. **Start here.** |
 | `http://127.0.0.1:4173/demo.html` | **Live demo console** — the 5-step hackathon story with scorecard and JSON log. **Start here for a demo.** |
-| `http://127.0.0.1:4173/merchant.html` | **Merchant agent console** — catalog, private sell range, public range, auto-accept, terms, editable agent name/tone/greeting, add product |
+| `http://127.0.0.1:4173/merchant.html` | **Merchant agent console** — catalog, private sell range, public range, auto-accept, terms, editable agent name/tone/greeting, agent/import setup |
 | `http://127.0.0.1:4173/market.html` | **Negotiation index** — categories, search, budget, published ranges, merchant trust, protection, "Negotiate with agent" |
 | `http://127.0.0.1:4173/negotiate.html?merchant=m1&product=p1` | **Consumer-agent negotiation** — passport, mandate, agent-to-agent chat, signed contract, SIM/live checkout, claim |
 | `http://127.0.0.1:4173/` | **Merchant dashboard** — ledger, score, tier, reserve, fee, events, orders, verify signature |
@@ -43,7 +43,7 @@ The plug-and-play surface:
 2. **Negotiation index** (`/market.html`) — every listed item, grouped by category, with the public range, merchant trust tier/score, protection and terms. Filter by category, budget or merchant; "Negotiate with agent" opens the consumer flow.
 3. **Negotiate** (`/negotiate.html?merchant=m1&product=p1`) — the consumer's personal AI presents a passport and mandate, negotiates with the merchant agent, signs the contract, pays, and can file an instant claim.
 
-The **private floor never leaves the server**: `publicProduct()` strips `sell_min`/`sell_max`/`auto_accept`; the index only ever exposes `published_range`. Pausing the merchant agent (Enabled off) removes the merchant from the index and returns `409 MERCHANT_AGENT_DISABLED` on a new contract.
+The **private floor never appears in buyer/index responses**: `publicProduct()` strips `sell_min`/`sell_max`/`auto_accept`; the index only ever exposes `published_range`. The merchant console is the only place the private range is shown, and contract responses are redacted. Pausing the merchant agent (Enabled off) removes the merchant from the index and returns `409 MERCHANT_AGENT_DISABLED` on a new contract.
 
 ## Adapters & index feed
 

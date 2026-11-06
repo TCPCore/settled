@@ -134,7 +134,7 @@ The index can also show "from $X" (no ceiling) so the agent knows the item is ne
 - `GET /api/index?category=audio&budget=300&q=headphones&limit=20`
 - `GET /api/categories` → category tree + negotiable item counts + published ranges
 - `GET /api/merchants/:id/catalog` → merchant view with sell range + published range
-- `PATCH /api/merchants/:id/catalog/:sku` → update negotiable, ranges, terms, protection
+- `PATCH /api/merchants/:id/catalog/:productId` → update negotiable, ranges, terms, protection
 
 **Guardrails:** only passport-verified agents; rate limits; no bulk scraping; category-level opt-in; merchant can hide the range entirely ("offers welcome"); MAP/channel rules respected; anti-arbitrage detection; every index call logged.
 

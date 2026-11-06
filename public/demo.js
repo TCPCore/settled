@@ -817,7 +817,7 @@
         (state.contractAiRequested && !ai ? '<div class="demo-callout"><b>AI fallback:</b> the AI auto endpoint returned no reasoning payload — the deterministic transcript above is the contract of record.</div>' : '') +
         '<div class="demo-metrics" style="margin-top:10px">' +
           metric('Opening offer', esc(S.money(openingPrice))) +
-          metric('Auto-accept', esc(S.money(policy.auto_accept))) +
+          metric('Auto-accept', policy.auto_accept !== undefined ? esc(S.money(policy.auto_accept)) : 'server-enforced') +
           metric('Max discount', esc(policy.max_discount_pct !== undefined ? policy.max_discount_pct + '%' : '—')) +
           metric('Rounds', esc(numText(c.rounds))) +
         '</div>' +

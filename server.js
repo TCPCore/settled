@@ -453,8 +453,13 @@ async function handleClaim(req, res, orderId) {
   const merchant = data.getMerchant(order.merchant_id);
   if (!merchant) return fail(res, 404, 'MERCHANT_NOT_FOUND', `no merchant for order '${orderId}'`);
 
-  // Refund is bounded by both the order amount and the protection cap (§5).
-  const refund = round2(Math.min(order.amount, order.protection.cap));
+  // Refund is bounded by the order amount, the protection cap, and the
+  // funds actually available in the merchant reserve + network pool.
+  const available = round2((Number(merchant.reserve) || 0) + (Number(data.state.network_pool) || 0));
+  const refund = round2(Math.min(order.amount, order.protection.cap, available));
+  if (refund <= 0) {
+    return fail(res, 409, 'INSUFFICIENT_RESERVE', 'no reserve or pool funds are available for this claim');
+  }
 
   // --- AI claim explainer (advisory only; the rule engine stays final) ------
   // Runs BEFORE any reserve mutation so a slow/failed LLM never leaves money
@@ -605,7 +610,11 @@ async function handleTrustVerify(req, res) {
   const merchant = data.getMerchant(merchantId);
   if (!merchant) return fail(res, 404, 'MERCHANT_NOT_FOUND', `no merchant with id '${merchantId}'`);
 
-  const bundle = ledger.issueCredential(merchant);
+  // Verify a caller-supplied credential when present (tamper/portability demo);
+  // otherwise issue the merchant's current credential and verify that envelope.
+  const bundle = body.credential && body.signature
+    ? { credential: body.credential, signature: body.signature, alg: ledger.ALG }
+    : ledger.issueCredential(merchant);
   const { checks } = ledger.inspect(bundle.credential, bundle.signature);
 
   const reasons = [];
@@ -750,33 +759,33 @@ async function handleCreateContract(req, res) {
     }
   }
   const contract = contracts.create(body);
-  sendJson(res, 200, { contract });
+  sendJson(res, 200, { contract: contracts.publicContract(contract) });
 }
 
 function handleGetContract(req, res, id) {
   const contract = contracts.getContract(id);
   if (!contract) return fail(res, 404, 'CONTRACT_NOT_FOUND', `no contract with id '${id}'`);
   const verification = contracts.verifyContract(contract);
-  sendJson(res, 200, { contract, verification });
+  sendJson(res, 200, { contract: contracts.publicContract(contract), verification });
 }
 
 async function handleContractOffer(req, res, id) {
   const body = await readJson(req);
   const { contract, decision } = contracts.offer(id, body);
-  sendJson(res, 200, { contract, decision });
+  sendJson(res, 200, { contract: contracts.publicContract(contract), decision });
 }
 
 async function handleContractAccept(req, res, id) {
   const body = await readJson(req);
   const { contract } = contracts.accept(id, body);
-  sendJson(res, 200, { contract, verification: contracts.verifyContract(contract) });
+  sendJson(res, 200, { contract: contracts.publicContract(contract), verification: contracts.verifyContract(contract) });
 }
 
 async function handleContractAuto(req, res, id) {
   const body = await readJson(req);
   void body;
   const { contract } = contracts.auto(id);
-  sendJson(res, 200, { contract, verification: contracts.verifyContract(contract) });
+  sendJson(res, 200, { contract: contracts.publicContract(contract), verification: contracts.verifyContract(contract) });
 }
 
 /** AI-driven negotiation (falls back deterministically with no API key). */
@@ -784,7 +793,7 @@ async function handleContractAiAuto(req, res, id) {
   const body = await readJson(req);
   void body;
   const { contract, ai: aiInfo } = await contracts.aiAuto(id);
-  sendJson(res, 200, { contract, ai: aiInfo, verification: contracts.verifyContract(contract) });
+  sendJson(res, 200, { contract: contracts.publicContract(contract), ai: aiInfo, verification: contracts.verifyContract(contract) });
 }
 
 /** Public runtime config — never exposes secrets. */

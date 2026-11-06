@@ -279,7 +279,7 @@ async function ensureServer() {
       root: ROOT,
     });
   }
-  const childEnv = { ...process.env, PORT: String(PORT) };
+  const childEnv = { ...process.env, PORT: String(PORT), CONNECTOR_ALLOW_PRIVATE: '1', E2E_ALLOW_PRIVATE_POLICY: '1' };
   // Deterministic baseline: no AI key, no live PayPal, unless the caller opts in.
   // (Otherwise a developer's exported PAYPAL_LIVE=1 would make orders 'pending' and
   // the SIM-only assertions below meaningless.)
