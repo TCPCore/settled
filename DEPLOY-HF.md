@@ -1,6 +1,6 @@
 # Persistent free demo on Hugging Face Spaces
 
-The public demo is a **SIM-only** Docker Space: no keys, no money, no private ranges in buyer/index responses. It stays within HF's free CPU tier (2 vCPU / 16 GB) and can be kept warm for judging.
+The Space runs a **live PayPal sandbox + live AI** demo. Keys are Space secrets; PayPal is sandbox only; no real money moves. It stays within HF's free CPU tier (2 vCPU / 16 GB) and can be kept warm for judging.
 
 ## One-time setup
 
@@ -27,7 +27,7 @@ HF_TOKEN=hf_xxx HF_USER=<your-hf-user> ./deploy/huggingface/deploy.sh
 - If your **HF Pro** plan includes upgraded Space hardware, set sleep time to `-1` (never sleep) in Space settings, or call:
   `POST https://huggingface.co/api/spaces/<user>/bit-settled/sleeptime` with `{"seconds": -1}`.
   CPU-basic does not allow a custom sleep time.
-- The Space is public and SIM-only. Do **not** add PayPal/AI secrets to it.
+- The Space is public and runs in **PayPal sandbox**; keys are Space secrets and never reach the frontend. Do not use production credentials.
 
 ## What gets deployed
 

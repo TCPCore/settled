@@ -6,7 +6,7 @@
 
 **Design:** the interface follows PayPal’s design philosophy — blue-first, simple, trusted, human, accessible. See **[DESIGN-PHILOSOPHY.md](DESIGN-PHILOSOPHY.md)**.
 
-**Hosted SIM demo (judges):** https://tomscot-bit-settled.hf.space/start.html — no keys, no money. Deployed on Hugging Face Spaces; keepalive runs every 6 hours.
+**Hosted live-sandbox demo (judges):** https://tomscot-bit-settled.hf.space/start.html — real PayPal **sandbox** + live AI; keys are server-side Space secrets, no real money. Keepalive runs every 6 hours.
 
 A working prototype of **Trust Settlement**: a portable, HMAC-signed merchant trust ledger that prices buyer protection at checkout and pays claims instantly from a merchant reserve. The underlying concept is documented in [WRITEUP.md](WRITEUP.md).
 

@@ -9,9 +9,7 @@ RUN git clone --depth 1 https://github.com/cptlight/bit-settled.git .
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
-    PORT=7860 \
-    PAYPAL_LIVE=0 \
-    AI_PROVIDER=none
+    PORT=7860
 
 EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \

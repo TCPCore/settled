@@ -62,7 +62,7 @@ Buyers don't trust unfamiliar checkout. AI agents can now pay, but they cannot r
 
 ## Try it
 
-- **Hosted SIM demo:** `https://tomscot-bit-settled.hf.space` (Hugging Face Space, SIM only)
+- **Hosted live-sandbox demo:** `https://tomscot-bit-settled.hf.space` (Hugging Face Space; live PayPal sandbox + live AI, keys server-side)
 - **Repo:** https://github.com/cptlight/bit-settled
 - **Local:** `npm start` → `http://127.0.0.1:4173/start.html`
 - **Judge path:** Open the hosted URL → **Run the 5-step demo** → **Run full demo**. No keys, no money.
