@@ -1,0 +1,13 @@
+name: Deploy Hugging Face Space
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create/update Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USER: ${{ vars.HF_USER || 'cptlight' }}
+        run: ./deploy/huggingface/deploy.sh

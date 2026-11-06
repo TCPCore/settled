@@ -4,6 +4,8 @@
 
 **PayPal's merchant negotiation desk for the agent economy.** A PayPal-native tool that lets a merchant publish its policy, trust credential and protection terms, then let its merchant agent negotiate with any consumer's personal AI — visible offer/counter/accept, a signed Agent Commerce Contract, PayPal settlement, and a buyer claim paid from the merchant's reserve in about a second. The human trade ritual — trust, haggle, contract, guarantee, refund — at machine speed, with an audit trail.
 
+> **Canonical ready-to-paste text:** [SUBMISSION.md](SUBMISSION.md) — this file remains the detailed Devpost draft.
+
 > **Links (fill before submitting)**
 > - Repo: https://github.com/cptlight/bit-settled (Apache-2.0 — see [LICENSE](LICENSE))
 > - Demo video (<3 min, YouTube): `VIDEO_URL_HERE`

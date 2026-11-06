@@ -2,6 +2,8 @@
 
 **Settled** — reputation settles with the payment.
 
+**Submission:** ready-to-paste Devpost text in **[SUBMISSION.md](SUBMISSION.md)**.
+
 **Design:** the interface follows PayPal’s design philosophy — blue-first, simple, trusted, human, accessible. See **[DESIGN-PHILOSOPHY.md](DESIGN-PHILOSOPHY.md)**.
 
 A working prototype of **Trust Settlement**: a portable, HMAC-signed merchant trust ledger that prices buyer protection at checkout and pays claims instantly from a merchant reserve. The underlying concept is documented in [WRITEUP.md](WRITEUP.md).
